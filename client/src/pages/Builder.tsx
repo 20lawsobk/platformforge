@@ -16,17 +16,16 @@ import {
   Globe,
   Shield,
   Download,
-  CheckCircle2,
   Database
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import JSZip from "jszip";
 import { saveAs } from "file-saver";
 
-// Mock File System Data - Enhanced for "Full Scale Platform"
 const mockFileSystem = [
   {
     name: "infrastructure",
@@ -52,160 +51,84 @@ const mockFileSystem = [
   { name: "Dockerfile", type: "file" },
 ];
 
-// AI Architect Logs
-const aiLogs = [
-  { type: "ai", text: "Analyzing repository structure and dependencies..." },
-  { type: "ai", text: "Detected high-throughput Node.js API pattern." },
-  { type: "system", text: ">> Architecting microservices solution..." },
-  { type: "action", text: "PROVISIONING: Managed PostgreSQL (v15) for persistent data" },
-  { type: "action", text: "PROVISIONING: Redis Cluster for session caching & rate limiting" },
-  { type: "action", text: "CONFIGURING: Auto-scaling group (min: 2, max: 20 instances)" },
-  { type: "action", text: "SECURITY: Setting up VPC peering and private subnets" },
-  { type: "info", text: "Generating Terraform configuration..." },
-  { type: "cmd", text: "> terraform init && terraform apply -auto-approve" },
-  { type: "success", text: "Infrastructure provisioned in us-east-1, eu-west-1" },
-  { type: "ai", text: "Optimizing CDN rules for global content delivery..." },
-  { type: "success", text: "Platform deployed. Health checks passing." },
-];
-
 export default function Builder() {
   const search = useSearch();
   const params = new URLSearchParams(search);
-  const source = params.get("source") || "Untitled Project";
+  const projectId = params.get("id");
   const { toast } = useToast();
-  
-  const [isBuilding, setIsBuilding] = useState(false);
-  const [isComplete, setIsComplete] = useState(false);
-  const [logs, setLogs] = useState<typeof aiLogs>([]);
   const terminalEndRef = useRef<HTMLDivElement>(null);
 
-  // Simulate AI Build Process
-  useEffect(() => {
-    if (source) {
-      setLogs([]);
-      let currentStep = 0;
-      setIsBuilding(true);
-      setIsComplete(false);
+  // Fetch project data
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}`);
+      if (!res.ok) throw new Error('Failed to fetch project');
+      return res.json();
+    },
+    enabled: !!projectId,
+    refetchInterval: (data) => {
+      // Poll every 1s if project is not complete
+      return data?.status === 'complete' || data?.status === 'failed' ? false : 1000;
+    },
+  });
 
-      const interval = setInterval(() => {
-        if (currentStep < aiLogs.length) {
-          setLogs(prev => [...prev, aiLogs[currentStep]]);
-          currentStep++;
-        } else {
-          setIsBuilding(false);
-          setIsComplete(true);
-          clearInterval(interval);
-          toast({
-            title: "Architecture Complete",
-            description: "Your platform infrastructure has been generated successfully.",
-          });
-        }
-      }, 800);
+  // Fetch infrastructure template
+  const { data: infrastructure } = useQuery({
+    queryKey: ['infrastructure', projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/infrastructure`);
+      if (!res.ok) throw new Error('Failed to fetch infrastructure');
+      return res.json();
+    },
+    enabled: !!projectId && project?.status === 'complete',
+  });
 
-      return () => clearInterval(interval);
-    }
-  }, [source]);
+  // Fetch build logs
+  const { data: logs = [] } = useQuery({
+    queryKey: ['logs', projectId],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${projectId}/logs`);
+      if (!res.ok) throw new Error('Failed to fetch logs');
+      return res.json();
+    },
+    enabled: !!projectId,
+    refetchInterval: 1000, // Poll logs every second
+  });
 
   // Auto-scroll terminal
   useEffect(() => {
     terminalEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [logs]);
 
+  // Show toast when complete
+  useEffect(() => {
+    if (project?.status === 'complete') {
+      toast({
+        title: "Architecture Complete",
+        description: "Your platform infrastructure has been generated successfully.",
+      });
+    }
+  }, [project?.status]);
+
   const handleDownloadArtifacts = async () => {
+    if (!infrastructure) return;
+
     const zip = new JSZip();
     
-    // Generate "Real" Infrastructure Code
-    const terraformContent = `
-provider "aws" {
-  region = "us-east-1"
-}
-
-resource "aws_eks_cluster" "main" {
-  name     = "${source.replace(/[^a-zA-Z0-9]/g, '-')}-cluster"
-  role_arn = aws_iam_role.eks_cluster.arn
-
-  vpc_config {
-    subnet_ids = aws_subnet.private[*].id
-  }
-}
-
-resource "aws_db_instance" "default" {
-  allocated_storage    = 20
-  engine               = "postgres"
-  engine_version       = "15.3"
-  instance_class       = "db.t3.micro"
-  db_name              = "platform_db"
-  username             = "admin"
-  password             = var.db_password
-  skip_final_snapshot  = true
-}
-    `;
-
-    const k8sContent = `
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ${source.replace(/[^a-zA-Z0-9]/g, '-')}-app
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: main
-  template:
-    metadata:
-      labels:
-        app: main
-    spec:
-      containers:
-      - name: app
-        image: ${source}:latest
-        ports:
-        - containerPort: 3000
-        env:
-        - name: DB_HOST
-          valueFrom:
-            secretKeyRef:
-              name: db-secrets
-              key: host
----
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: main-autoscaler
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: main-app
-  minReplicas: 2
-  maxReplicas: 20
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-    `;
-
-    const dockerContent = `
-FROM node:18-alpine
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci --only=production
-COPY . .
-EXPOSE 3000
-CMD ["npm", "start"]
-    `;
-
-    // Add files to zip
     const infra = zip.folder("infrastructure");
-    infra?.file("main.tf", terraformContent);
-    infra?.file("k8s-cluster.yaml", k8sContent);
-    zip.file("Dockerfile", dockerContent);
-    zip.file("README.md", `# Platform Architecture for ${source}\n\nGenerated by PlatformBuilder AI.\n\n## Deployment\nRun \`terraform apply\` to provision resources.`);
+    if (infrastructure.terraformConfig) {
+      infra?.file("main.tf", infrastructure.terraformConfig);
+    }
+    if (infrastructure.kubernetesConfig) {
+      infra?.file("k8s-cluster.yaml", infrastructure.kubernetesConfig);
+    }
+    if (infrastructure.dockerfileContent) {
+      zip.file("Dockerfile", infrastructure.dockerfileContent);
+    }
+    
+    zip.file("README.md", `# Platform Architecture for ${project?.name}\n\nGenerated by PlatformBuilder AI.\n\n## Deployment\nRun \`terraform apply\` to provision resources.`);
 
-    // Generate and save
     const content = await zip.generateAsync({ type: "blob" });
     saveAs(content, "platform-architecture-bundle.zip");
     
@@ -214,6 +137,9 @@ CMD ["npm", "start"]
       description: "Terraform, Kubernetes, and Docker configurations saved.",
     });
   };
+
+  const isBuilding = project?.status === 'analyzing' || project?.status === 'generating' || project?.status === 'pending';
+  const isComplete = project?.status === 'complete';
 
   return (
     <div className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
@@ -227,16 +153,16 @@ CMD ["npm", "start"]
           <div className="h-6 w-px bg-border" />
           <div className="flex items-center gap-2 text-sm">
              <Box className="h-4 w-4 text-muted-foreground" />
-             <span className="font-medium">{source}</span>
+             <span className="font-medium">{project?.name || 'Loading...'}</span>
              <Badge variant="outline" className={`ml-2 ${isBuilding ? 'bg-primary/10 text-primary border-primary/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}`}>
-                {isBuilding ? "Architecting..." : "Ready"}
+                {isBuilding ? "Architecting..." : isComplete ? "Ready" : project?.status}
              </Badge>
           </div>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm"><Share2 className="h-4 w-4 mr-2" /> Share</Button>
           
-          {isComplete && (
+          {isComplete && infrastructure && (
             <Button 
               variant="outline" 
               size="sm" 
@@ -247,7 +173,7 @@ CMD ["npm", "start"]
             </Button>
           )}
 
-          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold">
+          <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white font-bold" disabled={!isComplete}>
             <Play className="h-4 w-4 mr-2 fill-current" /> View Live
           </Button>
         </div>
@@ -280,7 +206,7 @@ CMD ["npm", "start"]
             </div>
           </div>
 
-          {/* Mock Editor Content - Showing Backend Code */}
+          {/* Mock Editor Content */}
           <div className="flex-1 p-4 font-mono text-sm overflow-auto text-muted-foreground leading-relaxed">
             <div><span className="text-gray-500">// AI GENERATED: High-availability server entry point</span></div>
             <div><span className="text-purple-400">import</span> <span className="text-blue-400">{`{ Cluster }`}</span> <span className="text-purple-400">from</span> <span className="text-green-400">"ioredis"</span>;</div>
@@ -292,48 +218,36 @@ CMD ["npm", "start"]
             <div>&nbsp;&nbsp;max: <span className="text-orange-400">20</span>,</div>
             <div>&nbsp;&nbsp;idleTimeoutMillis: <span className="text-orange-400">30000</span></div>
             <div>{`}`});</div>
-            <br />
-            <div><span className="text-gray-500">// Configure distributed caching layer</span></div>
-            <div><span className="text-purple-400">const</span> cache = <span className="text-purple-400">new</span> Cluster([<span className="text-green-400">process.env.REDIS_CLUSTER_URL</span>]);</div>
-            <br />
-            <div><span className="text-purple-400">export const</span> handler = <span className="text-blue-400">async</span> (req) ={`>`} {`{`}</div>
-            <div>&nbsp;&nbsp;<span className="text-gray-500">// Automatic request deduplication</span></div>
-            <div>&nbsp;&nbsp;<span className="text-purple-400">const</span> cached = <span className="text-blue-400">await</span> cache.get(req.id);</div>
-            <div>&nbsp;&nbsp;<span className="text-purple-400">if</span> (cached) <span className="text-purple-400">return</span> JSON.parse(cached);</div>
-            <div>{`}`}</div>
           </div>
 
-          {/* Terminal Panel - The "AI Brain" */}
+          {/* Terminal Panel */}
           <div className="h-64 border-t border-border bg-black/40 flex flex-col">
              <div className="flex items-center justify-between px-4 py-2 bg-card/20 border-b border-border/50">
-                <div className="flex items-center gap-2 text-xs font-bold uppercase text-primary animate-pulse">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase text-primary">
                   <BrainCircuit className="h-3 w-3" /> AI Architect Agent
-                </div>
-                <div className="flex gap-2">
-                   <div className="h-2 w-2 rounded-full bg-red-500/50" />
-                   <div className="h-2 w-2 rounded-full bg-yellow-500/50" />
-                   <div className="h-2 w-2 rounded-full bg-green-500/50" />
                 </div>
              </div>
              <ScrollArea className="flex-1 p-4 font-mono text-xs">
                 <div className="space-y-1.5">
-                  {logs.map((log, i) => (
+                  {logs.map((log: any, i: number) => (
                     <div key={i} className="flex gap-3 items-baseline">
                       <span className="text-muted-foreground select-none w-6 text-right opacity-30 text-[10px]">{i + 1}</span>
                       
-                      {log.type === "ai" && (
+                      {log.logLevel === "ai" && (
                         <span className="text-purple-400 font-bold flex items-center gap-2">
-                          <BrainCircuit className="h-3 w-3" /> {log.text}
+                          <BrainCircuit className="h-3 w-3" /> {log.message}
                         </span>
                       )}
-                      {log.type === "system" && <span className="text-blue-300 italic">{log.text}</span>}
-                      {log.type === "action" && (
+                      {log.logLevel === "system" && <span className="text-blue-300 italic">{log.message}</span>}
+                      {log.logLevel === "action" && (
                         <span className="text-orange-300 flex items-center gap-2">
-                          <Server className="h-3 w-3" /> {log.text}
+                          <Server className="h-3 w-3" /> {log.message}
                         </span>
                       )}
-                      {log.type === "cmd" && <span className="text-muted-foreground">{log.text}</span>}
-                      {log.type === "success" && <span className="text-green-400 font-bold">{log.text}</span>}
+                      {log.logLevel === "cmd" && <span className="text-muted-foreground">{log.message}</span>}
+                      {log.logLevel === "info" && <span className="text-blue-300">{log.message}</span>}
+                      {log.logLevel === "success" && <span className="text-green-400 font-bold">{log.message}</span>}
+                      {log.logLevel === "error" && <span className="text-red-400 font-bold">{log.message}</span>}
                     </div>
                   ))}
                   {isBuilding && (
@@ -349,15 +263,13 @@ CMD ["npm", "start"]
           </div>
         </div>
 
-        {/* Preview Panel (Right Sidebar) */}
+        {/* Preview Panel */}
         <div className="w-80 border-l border-border bg-card/10 flex flex-col">
-          <div className="p-3 border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wider flex justify-between items-center">
-            <span>Infrastructure Map</span>
+          <div className="p-3 border-b border-border text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            Infrastructure Map
           </div>
           <div className="flex-1 flex items-center justify-center bg-black/20 p-6">
-             {/* Visualizing the architecture being built */}
              <div className="relative w-full h-full flex flex-col items-center justify-center gap-6">
-                {/* Load Balancer */}
                 <div className={`flex flex-col items-center transition-all duration-500 ${logs.length > 2 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                    <div className="h-12 w-12 rounded-full bg-blue-500/20 border border-blue-500/50 flex items-center justify-center">
                       <Globe className="h-6 w-6 text-blue-400" />
@@ -365,10 +277,8 @@ CMD ["npm", "start"]
                    <span className="text-[10px] font-mono mt-2 text-blue-300">Global CDN</span>
                 </div>
 
-                {/* Connecting Line */}
                 <div className={`h-8 w-px bg-gradient-to-b from-blue-500/50 to-purple-500/50 transition-all duration-500 delay-200 ${logs.length > 3 ? 'opacity-100' : 'opacity-0'}`} />
 
-                {/* Compute Cluster */}
                 <div className={`flex flex-col items-center transition-all duration-500 delay-300 ${logs.length > 5 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                    <div className="h-16 w-16 rounded-xl bg-purple-500/20 border border-purple-500/50 flex items-center justify-center relative">
                       <div className="absolute -top-2 -right-2 bg-green-500 text-black text-[9px] font-bold px-1.5 rounded-full">x20</div>
@@ -377,10 +287,8 @@ CMD ["npm", "start"]
                    <span className="text-[10px] font-mono mt-2 text-purple-300">K8s Cluster</span>
                 </div>
 
-                {/* Connecting Line */}
                 <div className={`h-8 w-px bg-gradient-to-b from-purple-500/50 to-orange-500/50 transition-all duration-500 delay-500 ${logs.length > 6 ? 'opacity-100' : 'opacity-0'}`} />
 
-                {/* Database Layer */}
                 <div className={`flex gap-4 transition-all duration-500 delay-700 ${logs.length > 8 ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
                    <div className="flex flex-col items-center">
                       <div className="h-10 w-10 rounded-lg bg-orange-500/20 border border-orange-500/50 flex items-center justify-center">
@@ -395,7 +303,6 @@ CMD ["npm", "start"]
                       <span className="text-[10px] font-mono mt-2 text-red-300">Redis</span>
                    </div>
                 </div>
-
              </div>
           </div>
         </div>

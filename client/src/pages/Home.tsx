@@ -5,17 +5,47 @@ import { ArrowRight, Github, Code2, Zap, Globe, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation } from "@tanstack/react-query";
 import Layout from "@/components/Layout";
 import bgImage from "@assets/generated_images/cybernetic_schematic_background.png";
 
 export default function Home() {
   const [input, setInput] = useState("");
   const [, setLocation] = useLocation();
+  const { toast } = useToast();
+
+  const createProject = useMutation({
+    mutationFn: async (sourceUrl: string) => {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: sourceUrl.split('/').pop() || 'New Project',
+          sourceUrl,
+          sourceType: sourceUrl.includes('github') ? 'github' : 'script',
+          status: 'pending',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to create project');
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setLocation(`/builder?id=${data.id}`);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to start infrastructure generation",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleIgnite = (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim()) {
-      setLocation(`/builder?source=${encodeURIComponent(input)}`);
+      createProject.mutate(input);
     }
   };
 
@@ -24,8 +54,7 @@ export default function Home() {
       <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-background">
         {/* Background Asset */}
         <div className="absolute inset-0 z-0">
-           {/* Grid Pattern Overlay */}
-          <div className="absolute inset-0 bg-grid-pattern opacity-[0.03] z-10 pointer-events-none" />
+           <div className="absolute inset-0 bg-grid-pattern opacity-[0.03] z-10 pointer-events-none" />
           
           <img 
             src={bgImage} 
@@ -69,10 +98,20 @@ export default function Home() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="https://github.com/user/repo or ./script.js" 
                   className="pl-10 h-12 bg-transparent border-none focus-visible:ring-0 text-base font-mono placeholder:text-muted-foreground/50"
+                  disabled={createProject.isPending}
                 />
               </div>
-              <Button type="submit" size="lg" className="h-12 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold transition-all hover:scale-105 hover:shadow-[0_0_20px_-5px_var(--color-primary)]">
-                Ignite <ArrowRight className="ml-2 h-4 w-4" />
+              <Button 
+                type="submit" 
+                size="lg" 
+                className="h-12 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold transition-all hover:scale-105 hover:shadow-[0_0_20px_-5px_var(--color-primary)]"
+                disabled={createProject.isPending}
+              >
+                {createProject.isPending ? (
+                  <>Processing...</>
+                ) : (
+                  <>Ignite <ArrowRight className="ml-2 h-4 w-4" /></>
+                )}
               </Button>
             </form>
 
