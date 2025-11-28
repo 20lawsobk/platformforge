@@ -52,13 +52,13 @@ export default function Home() {
             </motion.div>
             
             <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6 bg-clip-text text-transparent bg-gradient-to-r from-white to-white/60">
-              Scale Your Code. <br className="hidden md:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-blue-500">Instantly.</span>
+              AI-Architected <br className="hidden md:block" />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-cyan-400 to-blue-500">Platforms.</span>
             </h1>
             
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-2xl mx-auto leading-relaxed">
-              Transform simple scripts and GitHub repositories into production-grade platforms. 
-              Zero config. Global edge network. Enterprise security.
+              Don't just build apps. Generate enterprise-grade infrastructure.
+              From scripts to auto-scaling Kubernetes clusters in one click.
             </p>
 
             <form onSubmit={handleIgnite} className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto p-2 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm shadow-2xl">
