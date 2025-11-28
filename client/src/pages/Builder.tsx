@@ -56,7 +56,31 @@ import {
   Eye,
   EyeOff,
   RotateCcw,
-  ChevronUp
+  ChevronUp,
+  Bot,
+  Sparkles,
+  Send,
+  Lightbulb,
+  Wrench,
+  CheckCircle2,
+  Circle,
+  Clock,
+  AlertCircle,
+  FileEdit,
+  ArrowRight,
+  Code2,
+  Compass,
+  Target,
+  Brain,
+  Wand2,
+  PenTool,
+  Loader2,
+  ThumbsUp,
+  ThumbsDown,
+  RotateCw,
+  Clipboard,
+  PanelRight,
+  PanelRightClose
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -113,6 +137,36 @@ interface EnvVariable {
   key: string;
   value: string;
   isSecret: boolean;
+}
+
+interface AIMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  timestamp: Date;
+  isStreaming?: boolean;
+  codeBlocks?: { language: string; code: string; filename?: string }[];
+}
+
+interface AgentTask {
+  id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'running' | 'awaiting_approval' | 'completed' | 'failed';
+  createdAt: Date;
+  fileChanges?: { path: string; action: 'create' | 'modify' | 'delete'; preview?: string }[];
+  logs?: string[];
+}
+
+interface ArchitectRecommendation {
+  id: string;
+  title: string;
+  category: 'architecture' | 'performance' | 'security' | 'scalability' | 'best-practice';
+  priority: 'high' | 'medium' | 'low';
+  description: string;
+  rationale: string;
+  implementation?: string;
+  status: 'pending' | 'accepted' | 'dismissed';
 }
 
 const COMMAND_RESPONSES: Record<string, string[]> = {
@@ -194,6 +248,90 @@ export default function Builder() {
     { name: 'You', avatar: 'Y', color: 'bg-green-500', status: 'online', cursor: null },
     { name: 'AI Agent', avatar: 'AI', color: 'bg-purple-500', status: 'online', cursor: 'infrastructure/main.tf:42' },
   ]);
+
+  // AI Panel State
+  const [aiPanelOpen, setAiPanelOpen] = useState(true);
+  const [aiPanelTab, setAiPanelTab] = useState<'assistant' | 'agent' | 'architect'>('assistant');
+  const [aiChatInput, setAiChatInput] = useState('');
+  const [aiIsTyping, setAiIsTyping] = useState(false);
+  const aiChatEndRef = useRef<HTMLDivElement>(null);
+  const [aiMessages, setAiMessages] = useState<AIMessage[]>([
+    {
+      id: '1',
+      role: 'assistant',
+      content: "Hi! I'm your AI coding assistant. I can help you with:\n\n• Writing and debugging code\n• Explaining complex concepts\n• Generating infrastructure configurations\n• Reviewing and improving your code\n\nHow can I help you today?",
+      timestamp: new Date(),
+    }
+  ]);
+  const [agentTasks, setAgentTasks] = useState<AgentTask[]>([
+    {
+      id: '1',
+      title: 'Generate Terraform configuration',
+      description: 'Create production-ready Terraform files with VPC, EKS, RDS, and ElastiCache',
+      status: 'completed',
+      createdAt: new Date(Date.now() - 300000),
+      fileChanges: [
+        { path: '/infrastructure/main.tf', action: 'create' },
+        { path: '/infrastructure/variables.tf', action: 'create' },
+        { path: '/infrastructure/outputs.tf', action: 'create' },
+      ],
+      logs: ['Analyzing project structure...', 'Detecting AWS services needed...', 'Generated Terraform configuration'],
+    },
+    {
+      id: '2',
+      title: 'Create Kubernetes manifests',
+      description: 'Generate deployment, service, ingress, and HPA configurations',
+      status: 'completed',
+      createdAt: new Date(Date.now() - 180000),
+      fileChanges: [
+        { path: '/kubernetes/deployment.yaml', action: 'create' },
+        { path: '/kubernetes/service.yaml', action: 'create' },
+        { path: '/kubernetes/hpa.yaml', action: 'create' },
+      ],
+    },
+  ]);
+  const [architectRecommendations, setArchitectRecommendations] = useState<ArchitectRecommendation[]>([
+    {
+      id: '1',
+      title: 'Enable container security scanning',
+      category: 'security',
+      priority: 'high',
+      description: 'Add container image vulnerability scanning to your CI/CD pipeline',
+      rationale: 'Container images can contain vulnerable dependencies. Scanning catches these before deployment.',
+      implementation: 'Add Trivy or Snyk container scanning step in your deployment workflow',
+      status: 'pending',
+    },
+    {
+      id: '2',
+      title: 'Implement pod disruption budgets',
+      category: 'scalability',
+      priority: 'medium',
+      description: 'Add PodDisruptionBudget resources to ensure availability during updates',
+      rationale: 'Without PDBs, cluster upgrades could take down all replicas simultaneously.',
+      implementation: 'Create PDB with minAvailable: 1 or maxUnavailable: 25%',
+      status: 'pending',
+    },
+    {
+      id: '3',
+      title: 'Use managed database secrets',
+      category: 'security',
+      priority: 'high',
+      description: 'Rotate database credentials using AWS Secrets Manager',
+      rationale: 'Static credentials in environment variables are a security risk.',
+      implementation: 'Configure external-secrets operator with AWS Secrets Manager',
+      status: 'accepted',
+    },
+    {
+      id: '4',
+      title: 'Add resource quotas and limits',
+      category: 'performance',
+      priority: 'medium',
+      description: 'Define CPU and memory limits for all containers',
+      rationale: 'Without limits, a single pod could consume all node resources.',
+      status: 'pending',
+    },
+  ]);
+  const [agentTaskInput, setAgentTaskInput] = useState('');
 
   const { data: project } = useQuery({
     queryKey: ['project', projectId],
@@ -412,6 +550,119 @@ export default function Builder() {
       toast({ title: "Copied to clipboard" });
     }
   };
+
+  // AI Assistant handlers
+  const simulateAIResponse = async (userMessage: string) => {
+    setAiIsTyping(true);
+    
+    // Simulate thinking delay
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 1000));
+    
+    // Generate contextual response based on user input
+    let response = '';
+    const lowerMessage = userMessage.toLowerCase();
+    
+    if (lowerMessage.includes('terraform') || lowerMessage.includes('infrastructure')) {
+      response = `I can help you with Terraform! Based on your project, here's what I recommend:\n\n**Current Infrastructure:**\n• VPC with public/private subnets\n• EKS cluster for Kubernetes workloads\n• RDS PostgreSQL for persistent data\n• ElastiCache Redis for caching\n\n**Suggested improvements:**\n1. Add WAF for the load balancer\n2. Enable encryption at rest for all storage\n3. Configure CloudWatch alarms for monitoring\n\nWould you like me to generate any of these configurations?`;
+    } else if (lowerMessage.includes('kubernetes') || lowerMessage.includes('k8s') || lowerMessage.includes('deploy')) {
+      response = `Your Kubernetes configuration looks solid! Here's my analysis:\n\n**Current Setup:**\n• Deployment with ${infrastructure?.minInstances || 2}-${infrastructure?.maxInstances || 20} replicas\n• HorizontalPodAutoscaler configured\n• Service with LoadBalancer type\n\n**Recommendations:**\n\`\`\`yaml\nresources:\n  requests:\n    memory: "256Mi"\n    cpu: "250m"\n  limits:\n    memory: "512Mi"\n    cpu: "500m"\n\`\`\`\n\nShould I add resource limits to your deployment?`;
+    } else if (lowerMessage.includes('docker') || lowerMessage.includes('container')) {
+      response = `Let me help with your Docker configuration!\n\n**Best practices I've applied:**\n• Multi-stage build for smaller images\n• Non-root user for security\n• Health checks configured\n• Alpine base for minimal footprint\n\n**Dockerfile optimization tips:**\n1. Order commands from least to most frequently changing\n2. Combine RUN commands to reduce layers\n3. Use .dockerignore to exclude dev files\n\nDo you want me to optimize your Dockerfile further?`;
+    } else if (lowerMessage.includes('help') || lowerMessage.includes('what can you do')) {
+      response = `I'm your AI coding assistant! Here's what I can help you with:\n\n**Code Assistance:**\n• Write and debug code across multiple languages\n• Explain complex code snippets\n• Suggest optimizations and refactoring\n\n**Infrastructure:**\n• Generate Terraform configurations\n• Create Kubernetes manifests\n• Optimize Docker builds\n\n**Architecture:**\n• Review system design decisions\n• Suggest scalability improvements\n• Identify security vulnerabilities\n\nJust ask me anything about your project!`;
+    } else if (lowerMessage.includes('error') || lowerMessage.includes('bug') || lowerMessage.includes('fix')) {
+      response = `I'll help you debug that! To analyze the issue effectively, please share:\n\n1. **Error message** - The exact error text\n2. **Context** - What file/function is affected\n3. **Expected behavior** - What should happen\n\nIn the meantime, here are common fixes:\n\n• Check syntax errors and missing imports\n• Verify environment variables are set\n• Ensure dependencies are installed\n• Review recent code changes\n\nPaste the relevant code and I'll take a closer look!`;
+    } else if (lowerMessage.includes('scale') || lowerMessage.includes('performance')) {
+      response = `Let's optimize for scale! Based on your infrastructure:\n\n**Current Capacity:**\n• Min instances: ${infrastructure?.minInstances || 2}\n• Max instances: ${infrastructure?.maxInstances || 20}\n• Auto-scaling: CPU/Memory based\n\n**Performance Recommendations:**\n1. **Caching** - Your Redis setup is good for session/query caching\n2. **CDN** - Add CloudFront for static assets\n3. **Database** - Consider read replicas for heavy read loads\n4. **Async** - Use message queues for background jobs\n\nWant me to implement any of these improvements?`;
+    } else {
+      response = `Thanks for your message! I'm analyzing your project context...\n\n**Project Overview:**\n• Type: ${infrastructure?.architecture || 'Microservices'}\n• Language: ${infrastructure?.detectedLanguage || 'Node.js'}\n• Framework: ${infrastructure?.detectedFramework || 'Express'}\n\nI'm here to help with code, infrastructure, and architecture questions. What specific aspect would you like to explore?\n\n*Tip: Try asking about "terraform", "kubernetes", "docker", or "scaling" for detailed guidance!*`;
+    }
+
+    setAiIsTyping(false);
+    
+    const newMessage: AIMessage = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: response,
+      timestamp: new Date(),
+    };
+    
+    setAiMessages(prev => [...prev, newMessage]);
+  };
+
+  const handleAIChatSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aiChatInput.trim() || aiIsTyping) return;
+    
+    const userMessage: AIMessage = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: aiChatInput,
+      timestamp: new Date(),
+    };
+    
+    setAiMessages(prev => [...prev, userMessage]);
+    setAiChatInput('');
+    
+    simulateAIResponse(aiChatInput);
+  };
+
+  const handleAgentTaskSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!agentTaskInput.trim()) return;
+    
+    const newTask: AgentTask = {
+      id: Date.now().toString(),
+      title: agentTaskInput,
+      description: 'Analyzing task and planning implementation...',
+      status: 'running',
+      createdAt: new Date(),
+      logs: ['Starting task...', 'Analyzing codebase...'],
+    };
+    
+    setAgentTasks(prev => [newTask, ...prev]);
+    setAgentTaskInput('');
+    
+    // Simulate task progress
+    setTimeout(() => {
+      setAgentTasks(prev => prev.map(t => 
+        t.id === newTask.id 
+          ? { ...t, status: 'awaiting_approval' as const, logs: [...(t.logs || []), 'Changes ready for review'], fileChanges: [{ path: '/infrastructure/new-config.tf', action: 'create' as const }] }
+          : t
+      ));
+    }, 3000);
+  };
+
+  const handleApproveTask = (taskId: string) => {
+    setAgentTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, status: 'completed' as const, logs: [...(t.logs || []), 'Changes applied successfully'] } : t
+    ));
+    toast({ title: "Task completed", description: "Changes have been applied to your project." });
+  };
+
+  const handleRejectTask = (taskId: string) => {
+    setAgentTasks(prev => prev.map(t => 
+      t.id === taskId ? { ...t, status: 'failed' as const, logs: [...(t.logs || []), 'Task rejected by user'] } : t
+    ));
+    toast({ title: "Task rejected", description: "Changes have been discarded." });
+  };
+
+  const handleAcceptRecommendation = (recId: string) => {
+    setArchitectRecommendations(prev => prev.map(r => 
+      r.id === recId ? { ...r, status: 'accepted' as const } : r
+    ));
+    toast({ title: "Recommendation accepted", description: "This will be added to your task queue." });
+  };
+
+  const handleDismissRecommendation = (recId: string) => {
+    setArchitectRecommendations(prev => prev.map(r => 
+      r.id === recId ? { ...r, status: 'dismissed' as const } : r
+    ));
+  };
+
+  useEffect(() => {
+    aiChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [aiMessages, aiIsTyping]);
 
   const handleTerminalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -1027,7 +1278,385 @@ export default function Builder() {
             </ScrollArea>
           </aside>
         )}
+
+        {/* AI Panel - Replit Style */}
+        {aiPanelOpen && (
+          <aside className="w-96 border-l border-[#30363d] bg-[#0d1117] flex flex-col shrink-0">
+            <div className="flex items-center justify-between h-12 px-4 border-b border-[#30363d] bg-[#161b22]">
+              <div className="flex items-center gap-3">
+                {[
+                  { id: 'assistant', icon: MessageSquare, label: 'Assistant', color: 'text-blue-400' },
+                  { id: 'agent', icon: Bot, label: 'Agent', color: 'text-purple-400' },
+                  { id: 'architect', icon: Compass, label: 'Architect', color: 'text-orange-400' },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                      aiPanelTab === tab.id 
+                        ? `bg-${tab.color.split('-')[1]}-500/20 ${tab.color}` 
+                        : 'text-muted-foreground hover:text-foreground hover:bg-[#21262d]'
+                    }`}
+                    onClick={() => setAiPanelTab(tab.id as any)}
+                    data-testid={`ai-tab-${tab.id}`}
+                  >
+                    <tab.icon className="h-3.5 w-3.5" />
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setAiPanelOpen(false)}
+                data-testid="button-close-ai-panel"
+              >
+                <PanelRightClose className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* AI Assistant Tab */}
+            {aiPanelTab === 'assistant' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <ScrollArea className="flex-1 p-4">
+                  <div className="space-y-4">
+                    {aiMessages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+                        data-testid={`ai-message-${message.id}`}
+                      >
+                        <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                          message.role === 'user' ? 'bg-green-500' : 'bg-gradient-to-br from-blue-500 to-purple-600'
+                        }`}>
+                          {message.role === 'user' ? (
+                            <span className="text-xs font-bold text-white">Y</span>
+                          ) : (
+                            <Sparkles className="h-4 w-4 text-white" />
+                          )}
+                        </div>
+                        <div className={`flex-1 ${message.role === 'user' ? 'text-right' : ''}`}>
+                          <div className={`inline-block max-w-full text-left rounded-lg p-3 text-sm ${
+                            message.role === 'user' 
+                              ? 'bg-primary text-primary-foreground' 
+                              : 'bg-[#161b22] border border-[#30363d]'
+                          }`}>
+                            <div className="whitespace-pre-wrap break-words prose prose-invert prose-sm max-w-none">
+                              {message.content.split('\n').map((line, i) => {
+                                if (line.startsWith('```')) {
+                                  return <code key={i} className="block bg-[#0d1117] p-2 rounded text-xs font-mono my-2">{line.slice(3)}</code>;
+                                }
+                                if (line.startsWith('**') && line.endsWith('**')) {
+                                  return <strong key={i} className="block text-foreground">{line.slice(2, -2)}</strong>;
+                                }
+                                if (line.startsWith('• ') || line.startsWith('- ')) {
+                                  return <div key={i} className="flex gap-2"><span className="text-primary">•</span>{line.slice(2)}</div>;
+                                }
+                                if (line.match(/^\d+\./)) {
+                                  return <div key={i} className="flex gap-2"><span className="text-primary">{line.match(/^\d+/)?.[0]}.</span>{line.replace(/^\d+\./, '')}</div>;
+                                }
+                                if (line.startsWith('*') && line.endsWith('*')) {
+                                  return <em key={i} className="block text-muted-foreground text-xs">{line.slice(1, -1)}</em>;
+                                }
+                                return <span key={i}>{line}{'\n'}</span>;
+                              })}
+                            </div>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground mt-1">
+                            {message.timestamp.toLocaleTimeString()}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    {aiIsTyping && (
+                      <div className="flex gap-3">
+                        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
+                          <Sparkles className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="bg-[#161b22] border border-[#30363d] rounded-lg p-3 flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                          <span className="text-sm text-muted-foreground">Thinking...</span>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={aiChatEndRef} />
+                  </div>
+                </ScrollArea>
+
+                <div className="p-4 border-t border-[#30363d] bg-[#161b22]">
+                  <form onSubmit={handleAIChatSubmit} className="relative">
+                    <textarea
+                      value={aiChatInput}
+                      onChange={(e) => setAiChatInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleAIChatSubmit(e);
+                        }
+                      }}
+                      placeholder="Ask AI anything..."
+                      className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg px-4 py-3 pr-12 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary/50 min-h-[80px]"
+                      data-testid="input-ai-chat"
+                    />
+                    <Button
+                      type="submit"
+                      size="icon"
+                      className="absolute right-2 bottom-2 h-8 w-8 bg-primary hover:bg-primary/90"
+                      disabled={!aiChatInput.trim() || aiIsTyping}
+                      data-testid="button-send-ai"
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </form>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setAiChatInput('Explain this code')}>
+                      <Code2 className="h-3 w-3 mr-1" /> Explain
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setAiChatInput('How can I improve the infrastructure?')}>
+                      <Lightbulb className="h-3 w-3 mr-1" /> Improve
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setAiChatInput('Fix any bugs in this file')}>
+                      <Wrench className="h-3 w-3 mr-1" /> Debug
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* AI Agent Tab */}
+            {aiPanelTab === 'agent' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-[#30363d] bg-[#161b22]">
+                  <form onSubmit={handleAgentTaskSubmit}>
+                    <div className="flex gap-2">
+                      <Input
+                        value={agentTaskInput}
+                        onChange={(e) => setAgentTaskInput(e.target.value)}
+                        placeholder="Describe a task for the agent..."
+                        className="bg-[#0d1117] border-[#30363d] text-sm"
+                        data-testid="input-agent-task"
+                      />
+                      <Button type="submit" size="sm" className="shrink-0" disabled={!agentTaskInput.trim()}>
+                        <Play className="h-3.5 w-3.5 mr-1" /> Run
+                      </Button>
+                    </div>
+                  </form>
+                  <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
+                    <Bot className="h-4 w-4 text-purple-400" />
+                    <span>Agent can modify files, run commands, and deploy changes</span>
+                  </div>
+                </div>
+
+                <ScrollArea className="flex-1 p-4">
+                  <div className="space-y-3">
+                    {agentTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="p-3 bg-[#161b22] border border-[#30363d] rounded-lg"
+                        data-testid={`agent-task-${task.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            {task.status === 'running' && <Loader2 className="h-4 w-4 animate-spin text-blue-400" />}
+                            {task.status === 'pending' && <Circle className="h-4 w-4 text-muted-foreground" />}
+                            {task.status === 'awaiting_approval' && <AlertCircle className="h-4 w-4 text-yellow-400" />}
+                            {task.status === 'completed' && <CheckCircle2 className="h-4 w-4 text-green-400" />}
+                            {task.status === 'failed' && <X className="h-4 w-4 text-red-400" />}
+                            <span className="text-sm font-medium">{task.title}</span>
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] ${
+                              task.status === 'running' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' :
+                              task.status === 'awaiting_approval' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
+                              task.status === 'completed' ? 'bg-green-500/10 text-green-400 border-green-500/30' :
+                              task.status === 'failed' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                              'bg-muted/10 text-muted-foreground'
+                            }`}
+                          >
+                            {task.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-3">{task.description}</p>
+                        
+                        {task.fileChanges && task.fileChanges.length > 0 && (
+                          <div className="mb-3">
+                            <div className="text-xs text-muted-foreground mb-1.5">File Changes:</div>
+                            <div className="space-y-1">
+                              {task.fileChanges.map((change, i) => (
+                                <div key={i} className="flex items-center gap-2 text-xs">
+                                  {change.action === 'create' && <Plus className="h-3 w-3 text-green-400" />}
+                                  {change.action === 'modify' && <FileEdit className="h-3 w-3 text-yellow-400" />}
+                                  {change.action === 'delete' && <Trash2 className="h-3 w-3 text-red-400" />}
+                                  <span className="font-mono text-muted-foreground">{change.path}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {task.logs && task.logs.length > 0 && (
+                          <div className="mb-3 p-2 bg-[#0d1117] rounded text-xs font-mono text-muted-foreground max-h-20 overflow-y-auto">
+                            {task.logs.map((log, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                <ArrowRight className="h-2.5 w-2.5 text-primary shrink-0" />
+                                {log}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {task.status === 'awaiting_approval' && (
+                          <div className="flex items-center gap-2 pt-2 border-t border-[#30363d]">
+                            <Button
+                              size="sm"
+                              className="flex-1 h-7 text-xs bg-green-600 hover:bg-green-700"
+                              onClick={() => handleApproveTask(task.id)}
+                              data-testid={`button-approve-${task.id}`}
+                            >
+                              <Check className="h-3 w-3 mr-1" /> Apply Changes
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="flex-1 h-7 text-xs border-[#30363d] hover:bg-red-500/10 hover:text-red-400"
+                              onClick={() => handleRejectTask(task.id)}
+                              data-testid={`button-reject-${task.id}`}
+                            >
+                              <X className="h-3 w-3 mr-1" /> Reject
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            )}
+
+            {/* AI Architect Tab */}
+            {aiPanelTab === 'architect' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                <div className="p-4 border-b border-[#30363d] bg-[#161b22]">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Compass className="h-5 w-5 text-orange-400" />
+                    <h3 className="text-sm font-medium">Architecture Advisor</h3>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Strategic recommendations based on your infrastructure and best practices.
+                  </p>
+                </div>
+
+                <ScrollArea className="flex-1 p-4">
+                  <div className="space-y-3">
+                    {architectRecommendations.filter(r => r.status !== 'dismissed').map((rec) => (
+                      <div
+                        key={rec.id}
+                        className={`p-3 rounded-lg border ${
+                          rec.status === 'accepted' 
+                            ? 'bg-green-500/5 border-green-500/30' 
+                            : 'bg-[#161b22] border-[#30363d]'
+                        }`}
+                        data-testid={`architect-rec-${rec.id}`}
+                      >
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-center gap-2">
+                            {rec.category === 'security' && <Shield className="h-4 w-4 text-red-400" />}
+                            {rec.category === 'performance' && <Zap className="h-4 w-4 text-yellow-400" />}
+                            {rec.category === 'scalability' && <Layers className="h-4 w-4 text-blue-400" />}
+                            {rec.category === 'architecture' && <Server className="h-4 w-4 text-purple-400" />}
+                            {rec.category === 'best-practice' && <Lightbulb className="h-4 w-4 text-green-400" />}
+                            <span className="text-sm font-medium">{rec.title}</span>
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className={`text-[10px] ${
+                              rec.priority === 'high' ? 'bg-red-500/10 text-red-400 border-red-500/30' :
+                              rec.priority === 'medium' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30' :
+                              'bg-muted/10 text-muted-foreground'
+                            }`}
+                          >
+                            {rec.priority}
+                          </Badge>
+                        </div>
+
+                        <p className="text-xs text-foreground mb-2">{rec.description}</p>
+                        
+                        <div className="p-2 bg-[#0d1117] rounded text-xs mb-3">
+                          <div className="text-muted-foreground mb-1 flex items-center gap-1">
+                            <Brain className="h-3 w-3" /> Rationale:
+                          </div>
+                          <p className="text-foreground">{rec.rationale}</p>
+                        </div>
+
+                        {rec.implementation && (
+                          <div className="p-2 bg-[#0d1117] rounded text-xs mb-3">
+                            <div className="text-muted-foreground mb-1 flex items-center gap-1">
+                              <Wand2 className="h-3 w-3" /> Implementation:
+                            </div>
+                            <p className="text-foreground font-mono">{rec.implementation}</p>
+                          </div>
+                        )}
+
+                        {rec.status === 'pending' && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              className="flex-1 h-7 text-xs"
+                              onClick={() => handleAcceptRecommendation(rec.id)}
+                              data-testid={`button-accept-rec-${rec.id}`}
+                            >
+                              <ThumbsUp className="h-3 w-3 mr-1" /> Accept
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-muted-foreground"
+                              onClick={() => handleDismissRecommendation(rec.id)}
+                              data-testid={`button-dismiss-rec-${rec.id}`}
+                            >
+                              <ThumbsDown className="h-3 w-3 mr-1" /> Dismiss
+                            </Button>
+                          </div>
+                        )}
+
+                        {rec.status === 'accepted' && (
+                          <div className="flex items-center gap-2 text-xs text-green-400">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>Queued for implementation</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+
+                <div className="p-4 border-t border-[#30363d] bg-[#161b22]">
+                  <Button variant="outline" className="w-full border-[#30363d] text-sm" data-testid="button-refresh-recommendations">
+                    <RotateCw className="h-3.5 w-3.5 mr-2" /> Analyze for More Recommendations
+                  </Button>
+                </div>
+              </div>
+            )}
+          </aside>
+        )}
       </div>
+
+      {/* AI Panel Toggle Button (when closed) */}
+      {!aiPanelOpen && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="fixed right-4 top-1/2 -translate-y-1/2 h-auto py-3 px-2 bg-[#161b22] border border-[#30363d] rounded-lg hover:bg-[#21262d] z-50"
+          onClick={() => setAiPanelOpen(true)}
+          data-testid="button-open-ai-panel"
+        >
+          <div className="flex flex-col items-center gap-2">
+            <Sparkles className="h-5 w-5 text-primary" />
+            <span className="text-[10px] font-medium writing-mode-vertical" style={{ writingMode: 'vertical-rl' }}>AI Panel</span>
+          </div>
+        </Button>
+      )}
 
       <Dialog open={newItemDialog.open} onOpenChange={(open) => setNewItemDialog({...newItemDialog, open})}>
         <DialogContent className="bg-[#161b22] border-[#30363d]">
