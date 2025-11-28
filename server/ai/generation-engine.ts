@@ -59,6 +59,8 @@ export interface MonitoringOutput {
 
 export class InfrastructureGenerator {
   private options: GenerationOptions;
+  private projectName: string = 'app';
+  private region: string = 'us-west-2';
 
   constructor(options: Partial<GenerationOptions> = {}) {
     this.options = {
@@ -70,11 +72,26 @@ export class InfrastructureGenerator {
       security: options.security || 'standard',
       costOptimization: options.costOptimization ?? false,
     };
+    this.region = this.getDefaultRegion();
   }
 
-  generate(analysis: AnalysisResult): GeneratedInfrastructure {
+  private getDefaultRegion(): string {
+    const regionMap: Record<string, string> = {
+      'aws': 'us-west-2',
+      'gcp': 'us-central1',
+      'azure': 'eastus',
+      'multi-cloud': 'us-west-2',
+    };
+    return regionMap[this.options.cloudProvider];
+  }
+
+  generate(analysis: AnalysisResult, projectName?: string): GeneratedInfrastructure {
+    this.projectName = projectName || this.deriveProjectName(analysis);
+    
+    const infraPatterns = this.selectPatternsFromKnowledgeBase(analysis);
+    
     return {
-      terraform: this.generateTerraform(analysis),
+      terraform: this.generateTerraform(analysis, infraPatterns),
       kubernetes: this.generateKubernetes(analysis),
       docker: this.generateDocker(analysis),
       cicd: this.generateCICD(analysis),
@@ -83,11 +100,190 @@ export class InfrastructureGenerator {
     };
   }
 
-  private generateTerraform(analysis: AnalysisResult): TerraformOutput {
-    const projectName = 'platform-app';
-    const region = 'us-west-2';
+  private deriveProjectName(analysis: AnalysisResult): string {
+    const frameworkPrefixes: Record<string, string> = {
+      'Express': 'express-api',
+      'Next.js': 'nextjs-app',
+      'React': 'react-app',
+      'FastAPI': 'fastapi-service',
+      'Django': 'django-app',
+      'NestJS': 'nestjs-api',
+    };
+    return frameworkPrefixes[analysis.framework] || `${analysis.language}-app`;
+  }
 
-    const providersTf = `
+  private selectPatternsFromKnowledgeBase(analysis: AnalysisResult): {
+    terraform: string[];
+    kubernetes: string[];
+    docker: string;
+    compute: string;
+    database: string;
+    cache: string;
+  } {
+    const provider = this.options.cloudProvider;
+    
+    const providerMappings: Record<string, { network: string; compute: string; database: string; cache: string; registry: string }> = {
+      aws: { network: 'vpc', compute: 'eks', database: 'rds', cache: 'elasticache', registry: 'ecr' },
+      gcp: { network: 'vpc-network', compute: 'gke', database: 'cloud-sql', cache: 'memorystore', registry: 'artifact-registry' },
+      azure: { network: 'vnet', compute: 'aks', database: 'azure-database', cache: 'azure-cache', registry: 'acr' },
+      'multi-cloud': { network: 'vpc', compute: 'eks', database: 'rds', cache: 'elasticache', registry: 'ecr' },
+    };
+
+    const mapping = providerMappings[provider] || providerMappings.aws;
+    
+    const patterns = {
+      terraform: [] as string[],
+      kubernetes: [] as string[],
+      docker: '',
+      compute: mapping.compute,
+      database: mapping.database,
+      cache: mapping.cache,
+    };
+
+    patterns.terraform.push(mapping.network);
+    
+    if (analysis.architecture === 'Microservices' || analysis.services.length > 3) {
+      patterns.terraform.push(mapping.compute);
+    } else if (this.options.costOptimization && provider === 'aws') {
+      patterns.terraform.push('ecs-fargate');
+    } else {
+      patterns.terraform.push(mapping.compute);
+    }
+
+    if (analysis.databases.length > 0) {
+      patterns.terraform.push(mapping.database);
+    }
+
+    if (analysis.caches.length > 0) {
+      patterns.terraform.push(mapping.cache);
+    }
+
+    patterns.terraform.push(mapping.registry);
+    patterns.kubernetes.push('deployment', 'hpa', 'network-policy');
+    
+    const dockerPattern = knowledgeBase.getDockerPattern(analysis.language);
+    if (dockerPattern) {
+      patterns.docker = dockerPattern.dockerfile;
+    }
+
+    return patterns;
+  }
+
+  private generateProviderConfig(provider: string, projectName: string, region: string): string {
+    switch (provider) {
+      case 'gcp':
+        return `
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 5.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.23"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.11"
+    }
+  }
+
+  backend "gcs" {
+    bucket = "\${var.project_id}-terraform-state"
+    prefix = "\${var.environment}"
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "google-beta" {
+  project = var.project_id
+  region  = var.region
+}
+
+provider "kubernetes" {
+  host                   = "https://\${google_container_cluster.main.endpoint}"
+  token                  = data.google_client_config.default.access_token
+  cluster_ca_certificate = base64decode(google_container_cluster.main.master_auth[0].cluster_ca_certificate)
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = "https://\${google_container_cluster.main.endpoint}"
+    token                  = data.google_client_config.default.access_token
+    cluster_ca_certificate = base64decode(google_container_cluster.main.master_auth[0].cluster_ca_certificate)
+  }
+}
+
+data "google_client_config" "default" {}
+`;
+
+      case 'azure':
+        return `
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    azurerm = {
+      source  = "hashicorp/azurerm"
+      version = "~> 3.0"
+    }
+    kubernetes = {
+      source  = "hashicorp/kubernetes"
+      version = "~> 2.23"
+    }
+    helm = {
+      source  = "hashicorp/helm"
+      version = "~> 2.11"
+    }
+  }
+
+  backend "azurerm" {
+    resource_group_name  = "\${var.resource_group_name}"
+    storage_account_name = "\${var.storage_account_name}"
+    container_name       = "tfstate"
+    key                  = "\${var.environment}.tfstate"
+  }
+}
+
+provider "azurerm" {
+  features {
+    resource_group {
+      prevent_deletion_if_contains_resources = false
+    }
+  }
+}
+
+provider "kubernetes" {
+  host                   = azurerm_kubernetes_cluster.main.kube_config[0].host
+  client_certificate     = base64decode(azurerm_kubernetes_cluster.main.kube_config[0].client_certificate)
+  client_key             = base64decode(azurerm_kubernetes_cluster.main.kube_config[0].client_key)
+  cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config[0].cluster_ca_certificate)
+}
+
+provider "helm" {
+  kubernetes {
+    host                   = azurerm_kubernetes_cluster.main.kube_config[0].host
+    client_certificate     = base64decode(azurerm_kubernetes_cluster.main.kube_config[0].client_certificate)
+    client_key             = base64decode(azurerm_kubernetes_cluster.main.kube_config[0].client_key)
+    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.main.kube_config[0].cluster_ca_certificate)
+  }
+}
+`;
+
+      case 'aws':
+      default:
+        return `
 terraform {
   required_version = ">= 1.5.0"
 
@@ -151,8 +347,11 @@ provider "helm" {
   }
 }
 `;
+    }
+  }
 
-    const variablesTf = `
+  private generateVariables(provider: string, analysis: AnalysisResult, projectName: string, region: string): string {
+    const commonVars = `
 variable "project_name" {
   description = "Name of the project"
   type        = string
@@ -168,34 +367,10 @@ variable "environment" {
   }
 }
 
-variable "aws_region" {
-  description = "AWS region"
-  type        = string
-  default     = "${region}"
-}
-
-variable "vpc_cidr" {
-  description = "CIDR block for VPC"
-  type        = string
-  default     = "10.0.0.0/16"
-}
-
-variable "availability_zones" {
-  description = "Availability zones"
-  type        = list(string)
-  default     = ["${region}a", "${region}b", "${region}c"]
-}
-
 variable "kubernetes_version" {
   description = "Kubernetes version"
   type        = string
   default     = "1.28"
-}
-
-variable "node_instance_types" {
-  description = "EC2 instance types for EKS nodes"
-  type        = list(string)
-  default     = ["t3.medium", "t3.large"]
 }
 
 variable "node_min_size" {
@@ -216,16 +391,163 @@ variable "node_desired_size" {
   default     = ${analysis.services.length > 3 ? 5 : 3}
 }
 
+variable "db_storage_gb" {
+  description = "Database storage in GB"
+  type        = number
+  default     = ${this.options.environment === 'production' ? 100 : 20}
+}
+
+variable "enable_monitoring" {
+  description = "Enable monitoring"
+  type        = bool
+  default     = ${this.options.monitoring}
+}
+`;
+
+    switch (provider) {
+      case 'gcp':
+        return commonVars + `
+variable "project_id" {
+  description = "GCP Project ID"
+  type        = string
+}
+
+variable "region" {
+  description = "GCP region"
+  type        = string
+  default     = "${region}"
+}
+
+variable "zone" {
+  description = "GCP zone"
+  type        = string
+  default     = "${region}-a"
+}
+
+variable "network_cidr" {
+  description = "CIDR for VPC network"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "machine_type" {
+  description = "GCE machine type for GKE nodes"
+  type        = string
+  default     = "${this.options.environment === 'production' ? 'e2-standard-4' : 'e2-medium'}"
+}
+
+variable "db_tier" {
+  description = "Cloud SQL tier"
+  type        = string
+  default     = "${this.options.environment === 'production' ? 'db-custom-4-15360' : 'db-f1-micro'}"
+}
+
+variable "redis_tier" {
+  description = "Memorystore Redis tier"
+  type        = string
+  default     = "${this.options.environment === 'production' ? 'STANDARD_HA' : 'BASIC'}"
+}
+
+variable "labels" {
+  description = "Labels for all resources"
+  type        = map(string)
+  default     = {}
+}
+`;
+
+      case 'azure':
+        return commonVars + `
+variable "resource_group_name" {
+  description = "Azure Resource Group name"
+  type        = string
+}
+
+variable "storage_account_name" {
+  description = "Storage account name for Terraform state"
+  type        = string
+}
+
+variable "location" {
+  description = "Azure region"
+  type        = string
+  default     = "${region}"
+}
+
+variable "address_space" {
+  description = "VNet address space"
+  type        = list(string)
+  default     = ["10.0.0.0/16"]
+}
+
+variable "vm_size" {
+  description = "VM size for AKS nodes"
+  type        = string
+  default     = "${this.options.environment === 'production' ? 'Standard_D4s_v3' : 'Standard_B2s'}"
+}
+
+variable "sql_sku" {
+  description = "Azure SQL SKU"
+  type        = string
+  default     = "${this.options.environment === 'production' ? 'GP_Gen5_4' : 'Basic'}"
+}
+
+variable "redis_sku" {
+  description = "Azure Redis Cache SKU"
+  type        = string
+  default     = "${this.options.environment === 'production' ? 'Premium' : 'Basic'}"
+}
+
+variable "db_admin_username" {
+  description = "Database administrator username"
+  type        = string
+  default     = "dbadmin"
+  sensitive   = true
+}
+
+variable "db_admin_password" {
+  description = "Database administrator password"
+  type        = string
+  sensitive   = true
+}
+
+variable "tags" {
+  description = "Tags for all resources"
+  type        = map(string)
+  default     = {}
+}
+`;
+
+      case 'aws':
+      default:
+        return commonVars + `
+variable "aws_region" {
+  description = "AWS region"
+  type        = string
+  default     = "${region}"
+}
+
+variable "vpc_cidr" {
+  description = "CIDR block for VPC"
+  type        = string
+  default     = "10.0.0.0/16"
+}
+
+variable "availability_zones" {
+  description = "Availability zones"
+  type        = list(string)
+  default     = ["${region}a", "${region}b", "${region}c"]
+}
+
+variable "node_instance_types" {
+  description = "EC2 instance types for EKS nodes"
+  type        = list(string)
+  default     = ["t3.medium", "t3.large"]
+}
+
 variable "db_instance_class" {
   description = "RDS instance class"
   type        = string
   default     = "${this.options.environment === 'production' ? 'db.r6g.large' : 'db.t3.medium'}"
-}
-
-variable "db_allocated_storage" {
-  description = "Initial database storage in GB"
-  type        = number
-  default     = ${this.options.environment === 'production' ? 100 : 20}
 }
 
 variable "redis_node_type" {
@@ -234,20 +556,427 @@ variable "redis_node_type" {
   default     = "${this.options.environment === 'production' ? 'cache.r6g.large' : 'cache.t3.medium'}"
 }
 
-variable "enable_monitoring" {
-  description = "Enable enhanced monitoring"
-  type        = bool
-  default     = ${this.options.monitoring}
-}
-
 variable "common_tags" {
   description = "Common tags for all resources"
   type        = map(string)
   default     = {}
 }
 `;
+    }
+  }
 
-    const mainTf = `
+  private generateMainTf(provider: string, analysis: AnalysisResult): string {
+    switch (provider) {
+      case 'gcp':
+        return this.generateGCPMain(analysis);
+      case 'azure':
+        return this.generateAzureMain(analysis);
+      case 'aws':
+      default:
+        return this.generateAWSMain(analysis);
+    }
+  }
+
+  private generateGCPMain(analysis: AnalysisResult): string {
+    return `
+locals {
+  name = "\${var.project_name}-\${var.environment}"
+  labels = merge(var.labels, {
+    project     = var.project_name
+    environment = var.environment
+    managed_by  = "terraform"
+  })
+}
+
+# VPC Network
+resource "google_compute_network" "main" {
+  name                    = local.name
+  auto_create_subnetworks = false
+  project                 = var.project_id
+}
+
+resource "google_compute_subnetwork" "main" {
+  name          = "\${local.name}-subnet"
+  ip_cidr_range = cidrsubnet(var.network_cidr, 4, 0)
+  region        = var.region
+  network       = google_compute_network.main.id
+  project       = var.project_id
+
+  secondary_ip_range {
+    range_name    = "pods"
+    ip_cidr_range = cidrsubnet(var.network_cidr, 4, 1)
+  }
+
+  secondary_ip_range {
+    range_name    = "services"
+    ip_cidr_range = cidrsubnet(var.network_cidr, 4, 2)
+  }
+}
+
+# GKE Cluster
+resource "google_container_cluster" "main" {
+  name     = local.name
+  location = var.region
+  project  = var.project_id
+
+  remove_default_node_pool = true
+  initial_node_count       = 1
+
+  network    = google_compute_network.main.name
+  subnetwork = google_compute_subnetwork.main.name
+
+  ip_allocation_policy {
+    cluster_secondary_range_name  = "pods"
+    services_secondary_range_name = "services"
+  }
+
+  workload_identity_config {
+    workload_pool = "\${var.project_id}.svc.id.goog"
+  }
+
+  release_channel {
+    channel = var.environment == "production" ? "STABLE" : "REGULAR"
+  }
+
+  resource_labels = local.labels
+}
+
+resource "google_container_node_pool" "main" {
+  name       = "\${local.name}-pool"
+  location   = var.region
+  cluster    = google_container_cluster.main.name
+  project    = var.project_id
+
+  node_count = var.node_desired_size
+
+  autoscaling {
+    min_node_count = var.node_min_size
+    max_node_count = var.node_max_size
+  }
+
+  node_config {
+    machine_type = var.machine_type
+    
+    oauth_scopes = [
+      "https://www.googleapis.com/auth/cloud-platform"
+    ]
+
+    labels = local.labels
+
+    workload_metadata_config {
+      mode = "GKE_METADATA"
+    }
+  }
+}
+
+${analysis.databases.map((db, i) => `
+# Cloud SQL ${db.type}
+resource "google_sql_database_instance" "db_${i}" {
+  name             = "\${local.name}-${db.type}-${i}"
+  database_version = "${db.type === 'postgresql' ? 'POSTGRES_15' : 'MYSQL_8_0'}"
+  region           = var.region
+  project          = var.project_id
+
+  settings {
+    tier              = var.db_tier
+    availability_type = ${this.options.highAvailability ? '"REGIONAL"' : '"ZONAL"'}
+    disk_size         = var.db_storage_gb
+    disk_type         = "PD_SSD"
+
+    backup_configuration {
+      enabled            = true
+      binary_log_enabled = ${db.type === 'mysql'}
+      start_time         = "03:00"
+    }
+
+    ip_configuration {
+      ipv4_enabled    = false
+      private_network = google_compute_network.main.id
+    }
+
+    insights_config {
+      query_insights_enabled = var.enable_monitoring
+    }
+
+    user_labels = local.labels
+  }
+
+  deletion_protection = var.environment == "production"
+}
+`).join('\n')}
+
+${analysis.caches.map((cache, i) => `
+# Memorystore Redis
+resource "google_redis_instance" "cache_${i}" {
+  name           = "\${local.name}-redis-${i}"
+  tier           = var.redis_tier
+  memory_size_gb = ${this.options.environment === 'production' ? 5 : 1}
+  region         = var.region
+  project        = var.project_id
+
+  authorized_network = google_compute_network.main.id
+
+  redis_version = "REDIS_7_0"
+
+  labels = local.labels
+}
+`).join('\n')}
+
+# Artifact Registry
+resource "google_artifact_registry_repository" "main" {
+  location      = var.region
+  repository_id = local.name
+  format        = "DOCKER"
+  project       = var.project_id
+
+  labels = local.labels
+}
+`;
+  }
+
+  private generateAzureMain(analysis: AnalysisResult): string {
+    return `
+locals {
+  name = "\${var.project_name}-\${var.environment}"
+  tags = merge(var.tags, {
+    Project     = var.project_name
+    Environment = var.environment
+    ManagedBy   = "terraform"
+  })
+}
+
+# Resource Group
+resource "azurerm_resource_group" "main" {
+  name     = var.resource_group_name
+  location = var.location
+  tags     = local.tags
+}
+
+# Virtual Network
+resource "azurerm_virtual_network" "main" {
+  name                = "\${local.name}-vnet"
+  address_space       = var.address_space
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.tags
+}
+
+resource "azurerm_subnet" "aks" {
+  name                 = "aks-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [cidrsubnet(var.address_space[0], 4, 0)]
+}
+
+${analysis.databases.some(db => db.type === 'postgresql') ? `
+# Database Subnet for PostgreSQL
+resource "azurerm_subnet" "database_postgres" {
+  name                 = "database-postgres-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [cidrsubnet(var.address_space[0], 4, 1)]
+
+  delegation {
+    name = "fs-postgres"
+    service_delegation {
+      name = "Microsoft.DBforPostgreSQL/flexibleServers"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+}
+
+# Private DNS Zone for PostgreSQL
+resource "azurerm_private_dns_zone" "postgres" {
+  name                = "\${local.name}.postgres.database.azure.com"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "postgres" {
+  name                  = "\${local.name}-postgres-link"
+  private_dns_zone_name = azurerm_private_dns_zone.postgres.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+  resource_group_name   = azurerm_resource_group.main.name
+  tags                  = local.tags
+}
+` : ''}
+
+${analysis.databases.some(db => db.type === 'mysql') ? `
+# Database Subnet for MySQL
+resource "azurerm_subnet" "database_mysql" {
+  name                 = "database-mysql-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
+  address_prefixes     = [cidrsubnet(var.address_space[0], 4, 2)]
+
+  delegation {
+    name = "fs-mysql"
+    service_delegation {
+      name = "Microsoft.DBforMySQL/flexibleServers"
+      actions = ["Microsoft.Network/virtualNetworks/subnets/join/action"]
+    }
+  }
+}
+
+# Private DNS Zone for MySQL
+resource "azurerm_private_dns_zone" "mysql" {
+  name                = "\${local.name}.mysql.database.azure.com"
+  resource_group_name = azurerm_resource_group.main.name
+  tags                = local.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "mysql" {
+  name                  = "\${local.name}-mysql-link"
+  private_dns_zone_name = azurerm_private_dns_zone.mysql.name
+  virtual_network_id    = azurerm_virtual_network.main.id
+  resource_group_name   = azurerm_resource_group.main.name
+  tags                  = local.tags
+}
+` : ''}
+
+# AKS Cluster
+resource "azurerm_kubernetes_cluster" "main" {
+  name                = local.name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  dns_prefix          = local.name
+  kubernetes_version  = var.kubernetes_version
+
+  default_node_pool {
+    name           = "default"
+    node_count     = var.node_desired_size
+    vm_size        = var.vm_size
+    vnet_subnet_id = azurerm_subnet.aks.id
+
+    enable_auto_scaling = true
+    min_count           = var.node_min_size
+    max_count           = var.node_max_size
+  }
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  network_profile {
+    network_plugin    = "azure"
+    network_policy    = "calico"
+    load_balancer_sku = "standard"
+  }
+
+  oms_agent {
+    log_analytics_workspace_id = var.enable_monitoring ? azurerm_log_analytics_workspace.main[0].id : null
+  }
+
+  tags = local.tags
+}
+
+resource "azurerm_log_analytics_workspace" "main" {
+  count               = var.enable_monitoring ? 1 : 0
+  name                = "\${local.name}-logs"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "PerGB2018"
+  retention_in_days   = 30
+  tags                = local.tags
+}
+
+${analysis.databases.map((db, i) => db.type === 'postgresql' ? `
+# Azure Database for PostgreSQL
+resource "azurerm_postgresql_flexible_server" "db_${i}" {
+  name                   = "\${local.name}-postgresql-${i}"
+  resource_group_name    = azurerm_resource_group.main.name
+  location               = azurerm_resource_group.main.location
+  version                = "15"
+  delegated_subnet_id    = azurerm_subnet.database_postgres.id
+  private_dns_zone_id    = azurerm_private_dns_zone.postgres.id
+  
+  administrator_login    = var.db_admin_username
+  administrator_password = var.db_admin_password
+  
+  storage_mb             = var.db_storage_gb * 1024
+  sku_name               = var.sql_sku
+  
+  zone                   = ${this.options.highAvailability ? '"1"' : 'null'}
+  high_availability {
+    mode                      = ${this.options.highAvailability ? '"ZoneRedundant"' : '"Disabled"'}
+    standby_availability_zone = ${this.options.highAvailability ? '"2"' : 'null'}
+  }
+
+  backup_retention_days  = ${this.options.environment === 'production' ? 35 : 7}
+  geo_redundant_backup_enabled = ${this.options.environment === 'production'}
+
+  tags = local.tags
+  
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.postgres]
+}
+` : `
+# Azure Database for MySQL
+resource "azurerm_mysql_flexible_server" "db_${i}" {
+  name                   = "\${local.name}-mysql-${i}"
+  resource_group_name    = azurerm_resource_group.main.name
+  location               = azurerm_resource_group.main.location
+  version                = "8.0.21"
+  delegated_subnet_id    = azurerm_subnet.database_mysql.id
+  private_dns_zone_id    = azurerm_private_dns_zone.mysql.id
+  
+  administrator_login    = var.db_admin_username
+  administrator_password = var.db_admin_password
+  
+  storage {
+    size_gb = var.db_storage_gb
+  }
+  sku_name               = var.sql_sku
+  
+  zone                   = ${this.options.highAvailability ? '"1"' : 'null'}
+  high_availability {
+    mode                      = ${this.options.highAvailability ? '"ZoneRedundant"' : '"Disabled"'}
+    standby_availability_zone = ${this.options.highAvailability ? '"2"' : 'null'}
+  }
+
+  backup_retention_days  = ${this.options.environment === 'production' ? 35 : 7}
+  geo_redundant_backup_enabled = ${this.options.environment === 'production'}
+
+  tags = local.tags
+  
+  depends_on = [azurerm_private_dns_zone_virtual_network_link.mysql]
+}
+`).join('\n')}
+
+${analysis.caches.map((cache, i) => `
+# Azure Cache for Redis
+resource "azurerm_redis_cache" "cache_${i}" {
+  name                = "\${local.name}-redis-${i}"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  capacity            = ${this.options.environment === 'production' ? 2 : 0}
+  family              = var.redis_sku == "Premium" ? "P" : "C"
+  sku_name            = var.redis_sku
+  enable_non_ssl_port = false
+  minimum_tls_version = "1.2"
+
+  redis_configuration {
+    maxmemory_policy = "volatile-lru"
+  }
+
+  tags = local.tags
+}
+`).join('\n')}
+
+# Azure Container Registry
+resource "azurerm_container_registry" "main" {
+  name                = replace(local.name, "-", "")
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  sku                 = var.environment == "production" ? "Premium" : "Basic"
+  admin_enabled       = false
+
+  tags = local.tags
+}
+`;
+  }
+
+  private generateAWSMain(analysis: AnalysisResult): string {
+    return `
 locals {
   name = "\${var.project_name}-\${var.environment}"
   
@@ -292,7 +1021,6 @@ module "eks" {
   cluster_endpoint_public_access  = var.environment != "production"
   cluster_endpoint_private_access = true
 
-  # Node groups
   eks_managed_node_groups = {
     main = {
       instance_types = var.node_instance_types
@@ -308,20 +1036,12 @@ module "eks" {
     }
   }
 
-  # Enable IRSA
   enable_irsa = true
 
-  # Cluster addons
   cluster_addons = {
-    coredns = {
-      most_recent = true
-    }
-    kube-proxy = {
-      most_recent = true
-    }
-    vpc-cni = {
-      most_recent = true
-    }
+    coredns    = { most_recent = true }
+    kube-proxy = { most_recent = true }
+    vpc-cni    = { most_recent = true }
   }
 
   tags = local.common_tags
@@ -338,11 +1058,11 @@ module "rds_${i}" {
   engine_version = "${db.type === 'postgresql' ? '15.4' : '8.0'}"
   instance_class = var.db_instance_class
 
-  allocated_storage     = var.db_allocated_storage
-  max_allocated_storage = var.db_allocated_storage * 5
+  allocated_storage     = var.db_storage_gb
+  max_allocated_storage = var.db_storage_gb * 5
   storage_encrypted     = true
 
-  db_name  = "${projectName.replace(/-/g, '_')}"
+  db_name  = "${this.projectName.replace(/-/g, '_')}"
   username = "admin"
   port     = ${db.type === 'postgresql' ? 5432 : 3306}
 
@@ -439,32 +1159,103 @@ resource "aws_ecr_repository" "app" {
 
   tags = local.common_tags
 }
+`;
+  }
 
-# ECR Lifecycle Policy
-resource "aws_ecr_lifecycle_policy" "app" {
-  repository = aws_ecr_repository.app.name
+  private generateTerraform(analysis: AnalysisResult, patterns?: any): TerraformOutput {
+    const projectName = this.projectName;
+    const region = this.region;
+    const provider = this.options.cloudProvider;
 
-  policy = jsonencode({
-    rules = [
-      {
-        rulePriority = 1
-        description  = "Keep last 10 images"
-        selection = {
-          tagStatus     = "tagged"
-          tagPrefixList = ["v"]
-          countType     = "imageCountMoreThan"
-          countNumber   = 10
-        }
-        action = {
-          type = "expire"
-        }
-      }
-    ]
-  })
+    const providersTf = this.generateProviderConfig(provider, projectName, region);
+    const variablesTf = this.generateVariables(provider, analysis, projectName, region);
+    const mainTf = this.generateMainTf(provider, analysis);
+
+    const outputsTf = this.generateOutputs(provider, analysis);
+
+    return {
+      mainTf,
+      variablesTf,
+      outputsTf,
+      providersTf,
+      modules: this.generateModules(provider),
+      tfvars: this.generateAllTfvars(provider),
+    };
+  }
+
+  private generateOutputs(provider: string, analysis: AnalysisResult): string {
+    switch (provider) {
+      case 'gcp':
+        return `
+output "cluster_name" {
+  description = "GKE cluster name"
+  value       = google_container_cluster.main.name
+}
+
+output "cluster_endpoint" {
+  description = "GKE cluster endpoint"
+  value       = google_container_cluster.main.endpoint
+  sensitive   = true
+}
+
+output "artifact_registry_url" {
+  description = "Artifact Registry URL"
+  value       = "\${var.region}-docker.pkg.dev/\${var.project_id}/\${google_artifact_registry_repository.main.repository_id}"
+}
+
+${analysis.databases.map((db, i) => `
+output "db_${i}_connection_name" {
+  description = "Cloud SQL connection name for ${db.type}"
+  value       = google_sql_database_instance.db_${i}.connection_name
+}
+`).join('\n')}
+
+output "configure_kubectl" {
+  description = "Configure kubectl command"
+  value       = "gcloud container clusters get-credentials \${google_container_cluster.main.name} --region \${var.region} --project \${var.project_id}"
 }
 `;
 
-    const outputsTf = `
+      case 'azure':
+        return `
+output "cluster_name" {
+  description = "AKS cluster name"
+  value       = azurerm_kubernetes_cluster.main.name
+}
+
+output "cluster_fqdn" {
+  description = "AKS cluster FQDN"
+  value       = azurerm_kubernetes_cluster.main.fqdn
+}
+
+output "acr_login_server" {
+  description = "ACR login server"
+  value       = azurerm_container_registry.main.login_server
+}
+
+${analysis.databases.map((db, i) => db.type === 'postgresql' ? `
+output "db_${i}_fqdn" {
+  description = "Azure Database FQDN for PostgreSQL"
+  value       = azurerm_postgresql_flexible_server.db_${i}.fqdn
+  sensitive   = true
+}
+` : `
+output "db_${i}_fqdn" {
+  description = "Azure Database FQDN for MySQL"
+  value       = azurerm_mysql_flexible_server.db_${i}.fqdn
+  sensitive   = true
+}
+`).join('\n')}
+
+output "configure_kubectl" {
+  description = "Configure kubectl command"
+  value       = "az aks get-credentials --resource-group \${azurerm_resource_group.main.name} --name \${azurerm_kubernetes_cluster.main.name}"
+}
+`;
+
+      case 'aws':
+      default:
+        return `
 output "vpc_id" {
   description = "VPC ID"
   value       = module.vpc.vpc_id
@@ -493,35 +1284,101 @@ output "rds_${i}_endpoint" {
 }
 `).join('\n')}
 
-${analysis.caches.map((cache, i) => `
-output "elasticache_${i}_endpoint" {
-  description = "ElastiCache endpoint for ${cache.type}"
-  value       = module.elasticache_${i}.primary_endpoint_address
-}
-`).join('\n')}
-
 output "configure_kubectl" {
   description = "Configure kubectl command"
   value       = "aws eks update-kubeconfig --region \${var.aws_region} --name \${module.eks.cluster_name}"
 }
 `;
+    }
+  }
 
-    return {
-      mainTf,
-      variablesTf,
-      outputsTf,
-      providersTf,
-      modules: [
+  private generateModules(provider: string): { name: string; content: string }[] {
+    if (provider === 'aws') {
+      return [
         { name: 'vpc', content: this.generateVPCModule() },
         { name: 'eks', content: this.generateEKSModule() },
         { name: 'rds', content: this.generateRDSModule() },
-      ],
-      tfvars: [
-        { environment: 'development', content: this.generateTfvars('development') },
-        { environment: 'staging', content: this.generateTfvars('staging') },
-        { environment: 'production', content: this.generateTfvars('production') },
-      ],
+      ];
+    }
+    return [];
+  }
+
+  private generateAllTfvars(provider: string): { environment: string; content: string }[] {
+    return [
+      { environment: 'development', content: this.generateProviderTfvars(provider, 'development') },
+      { environment: 'staging', content: this.generateProviderTfvars(provider, 'staging') },
+      { environment: 'production', content: this.generateProviderTfvars(provider, 'production') },
+    ];
+  }
+
+  private generateProviderTfvars(provider: string, environment: string): string {
+    const config = {
+      development: { nodes: { min: 1, max: 5, desired: 2 }, storage: 20 },
+      staging: { nodes: { min: 2, max: 10, desired: 3 }, storage: 50 },
+      production: { nodes: { min: 3, max: 50, desired: 5 }, storage: 100 },
     };
+    const c = config[environment as keyof typeof config];
+
+    const common = `
+environment = "${environment}"
+
+node_min_size     = ${c.nodes.min}
+node_max_size     = ${c.nodes.max}
+node_desired_size = ${c.nodes.desired}
+db_storage_gb     = ${c.storage}
+enable_monitoring = ${environment === 'production'}
+`;
+
+    switch (provider) {
+      case 'gcp':
+        return common + `
+# GCP-specific
+project_id   = "your-gcp-project-id"
+machine_type = "${environment === 'production' ? 'e2-standard-4' : 'e2-medium'}"
+db_tier      = "${environment === 'production' ? 'db-custom-4-15360' : 'db-f1-micro'}"
+redis_tier   = "${environment === 'production' ? 'STANDARD_HA' : 'BASIC'}"
+
+labels = {
+  environment = "${environment}"
+  team        = "platform"
+}
+`;
+
+      case 'azure':
+        return common + `
+# Azure-specific - REQUIRED: Update these values before applying
+resource_group_name   = "${environment}-rg"
+storage_account_name  = "your${environment.slice(0, 4)}tfstate"  # Must be globally unique, 3-24 lowercase alphanumeric
+location              = "eastus"
+
+# Database credentials - REQUIRED: Update these securely
+db_admin_username     = "dbadmin"
+db_admin_password     = "CHANGE_ME_BEFORE_APPLY"  # Use terraform.tfvars or -var flag for sensitive values
+
+vm_size   = "${environment === 'production' ? 'Standard_D4s_v3' : 'Standard_B2s'}"
+sql_sku   = "${environment === 'production' ? 'GP_Gen5_4' : 'Basic'}"
+redis_sku = "${environment === 'production' ? 'Premium' : 'Basic'}"
+
+tags = {
+  Environment = "${environment}"
+  Team        = "platform"
+}
+`;
+
+      case 'aws':
+      default:
+        return common + `
+# AWS-specific
+node_instance_types = ${environment === 'production' ? '["m5.large", "m5.xlarge"]' : '["t3.medium", "t3.large"]'}
+db_instance_class   = "${environment === 'production' ? 'db.r6g.large' : 'db.t3.medium'}"
+redis_node_type     = "${environment === 'production' ? 'cache.r6g.large' : 'cache.t3.medium'}"
+
+common_tags = {
+  Environment = "${environment}"
+  Team        = "platform"
+}
+`;
+    }
   }
 
   private generateVPCModule(): string {
