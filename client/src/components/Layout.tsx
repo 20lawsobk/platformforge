@@ -29,9 +29,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           {/* Desktop Nav */}
           <div className="hidden md:flex items-center gap-6 text-sm font-medium">
-            <Link href="/features" className="text-muted-foreground hover:text-foreground transition-colors">Features</Link>
-            <Link href="/enterprise" className="text-muted-foreground hover:text-foreground transition-colors">Enterprise</Link>
-            <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors">Docs</Link>
+            <Link href="/compare" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-compare">Compare</Link>
+            <Link href="/features" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-features">Features</Link>
+            <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-docs">Docs</Link>
             <div className="h-4 w-px bg-border/50 mx-2" />
             <Button variant="ghost" className="font-mono text-xs">Login</Button>
             <Button variant="default" className="font-mono text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90">
@@ -49,10 +49,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </SheetTrigger>
               <SheetContent>
                 <div className="flex flex-col gap-4 mt-8">
-                  <Link href="/features" className="text-lg font-medium">Features</Link>
-                  <Link href="/enterprise" className="text-lg font-medium">Enterprise</Link>
-                  <Link href="/docs" className="text-lg font-medium">Docs</Link>
-                  <Button className="w-full mt-4">Start Building</Button>
+                  <Link href="/compare" className="text-lg font-medium" data-testid="link-mobile-compare">Compare</Link>
+                  <Link href="/features" className="text-lg font-medium" data-testid="link-mobile-features">Features</Link>
+                  <Link href="/docs" className="text-lg font-medium" data-testid="link-mobile-docs">Docs</Link>
+                  <Button className="w-full mt-4" data-testid="button-mobile-start">Start Building</Button>
                 </div>
               </SheetContent>
             </Sheet>

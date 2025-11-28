@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Builder from "@/pages/Builder";
+import Compare from "@/pages/Compare";
 import Overview from "@/pages/dashboard/Overview";
 import Deployments from "@/pages/dashboard/Deployments";
 import Settings from "@/pages/dashboard/Settings";
@@ -16,6 +17,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/builder" component={Builder} />
+      <Route path="/compare" component={Compare} />
       
       {/* Dashboard Routes */}
       <Route path="/dashboard" component={Overview} />
