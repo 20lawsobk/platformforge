@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
 import { insertProjectSchema, insertBuildLogSchema } from "@shared/schema";
+import { aiModelClient, fallbackResponses } from "./ai/model-client";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -71,6 +72,210 @@ export async function registerRoutes(
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch logs" });
+    }
+  });
+
+  // ============================================
+  // Custom AI Model Endpoints
+  // ============================================
+
+  // Health check for AI model
+  app.get("/api/ai/health", async (req, res) => {
+    try {
+      const health = await aiModelClient.health();
+      res.json(health);
+    } catch (error) {
+      res.json({
+        status: 'offline',
+        model_initialized: false,
+        is_training: false,
+        message: 'AI model service not running. Using fallback responses.'
+      });
+    }
+  });
+
+  // Get AI model info
+  app.get("/api/ai/model-info", async (req, res) => {
+    try {
+      const info = await aiModelClient.getModelInfo();
+      res.json(info);
+    } catch (error) {
+      res.json({
+        loaded: false,
+        message: 'AI model service not available'
+      });
+    }
+  });
+
+  // Chat with AI assistant
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { message, max_tokens = 200 } = req.body;
+      
+      if (!message || typeof message !== 'string') {
+        return res.status(400).json({ error: 'Message is required' });
+      }
+
+      try {
+        const result = await aiModelClient.chat({ message, max_tokens });
+        res.json({
+          response: result.response,
+          source: 'custom_model'
+        });
+      } catch {
+        // Fallback to rule-based responses
+        res.json({
+          response: fallbackResponses.chat(message),
+          source: 'fallback'
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to process chat message' });
+    }
+  });
+
+  // Generate text from prompt
+  app.post("/api/ai/generate", async (req, res) => {
+    try {
+      const { prompt, max_tokens = 100, temperature = 0.8, language } = req.body;
+      
+      if (!prompt || typeof prompt !== 'string') {
+        return res.status(400).json({ error: 'Prompt is required' });
+      }
+
+      try {
+        const result = await aiModelClient.generate({ prompt, max_tokens, temperature, language });
+        res.json({
+          generated_text: result.generated_text,
+          source: 'custom_model'
+        });
+      } catch {
+        res.json({
+          generated_text: fallbackResponses.generate(prompt),
+          source: 'fallback'
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to generate text' });
+    }
+  });
+
+  // Complete code
+  app.post("/api/ai/complete", async (req, res) => {
+    try {
+      const { code, language = 'python', max_tokens = 150 } = req.body;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Code is required' });
+      }
+
+      try {
+        const result = await aiModelClient.complete({ code, language, max_tokens });
+        res.json({
+          completion: result.completion,
+          source: 'custom_model'
+        });
+      } catch {
+        res.json({
+          completion: fallbackResponses.complete(code, language),
+          source: 'fallback'
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to complete code' });
+    }
+  });
+
+  // Explain code
+  app.post("/api/ai/explain", async (req, res) => {
+    try {
+      const { code, language = 'python' } = req.body;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Code is required' });
+      }
+
+      try {
+        const result = await aiModelClient.explain({ code, language });
+        res.json({
+          explanation: result.explanation,
+          source: 'custom_model'
+        });
+      } catch {
+        res.json({
+          explanation: fallbackResponses.explain(code),
+          source: 'fallback'
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to explain code' });
+    }
+  });
+
+  // Fix buggy code
+  app.post("/api/ai/fix", async (req, res) => {
+    try {
+      const { code, error: codeError, language = 'python' } = req.body;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Code is required' });
+      }
+      if (!codeError || typeof codeError !== 'string') {
+        return res.status(400).json({ error: 'Error message is required' });
+      }
+
+      try {
+        const result = await aiModelClient.fix({ code, error: codeError, language });
+        res.json({
+          fixed_code: result.fixed_code,
+          source: 'custom_model'
+        });
+      } catch {
+        res.json({
+          fixed_code: fallbackResponses.fix(code, codeError),
+          source: 'fallback'
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fix code' });
+    }
+  });
+
+  // Analyze code
+  app.post("/api/ai/analyze", async (req, res) => {
+    try {
+      const { code, language = 'python' } = req.body;
+      
+      if (!code || typeof code !== 'string') {
+        return res.status(400).json({ error: 'Code is required' });
+      }
+
+      try {
+        const result = await aiModelClient.analyze({ code, language });
+        res.json({
+          ...result,
+          source: 'custom_model'
+        });
+      } catch {
+        res.json({
+          explanation: fallbackResponses.explain(code),
+          completion: fallbackResponses.complete(code, language),
+          language,
+          source: 'fallback'
+        });
+      }
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to analyze code' });
+    }
+  });
+
+  // Clear chat history
+  app.post("/api/ai/clear-history", async (req, res) => {
+    try {
+      await aiModelClient.clearHistory();
+      res.json({ status: 'cleared' });
+    } catch {
+      res.json({ status: 'cleared', note: 'AI model offline, no history to clear' });
     }
   });
 

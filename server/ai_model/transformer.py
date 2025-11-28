@@ -16,6 +16,10 @@ class RotaryPositionalEmbedding(nn.Module):
     More effective than sinusoidal embeddings for language modeling.
     """
     
+    inv_freq: torch.Tensor
+    cos_cached: torch.Tensor
+    sin_cached: torch.Tensor
+    
     def __init__(self, dim: int, max_seq_len: int = 2048, base: int = 10000):
         super().__init__()
         self.dim = dim
@@ -29,8 +33,9 @@ class RotaryPositionalEmbedding(nn.Module):
     
     def _build_cache(self, seq_len: int):
         """Pre-compute rotary embeddings for efficiency."""
-        t = torch.arange(seq_len, device=self.inv_freq.device)
-        freqs = torch.einsum('i,j->ij', t, self.inv_freq)
+        inv_freq = self.inv_freq
+        t = torch.arange(seq_len, device=inv_freq.device)
+        freqs = torch.einsum('i,j->ij', t, inv_freq)
         emb = torch.cat((freqs, freqs), dim=-1)
         
         self.register_buffer('cos_cached', emb.cos()[None, None, :, :])
@@ -40,10 +45,9 @@ class RotaryPositionalEmbedding(nn.Module):
         if seq_len > self.max_seq_len:
             self._build_cache(seq_len)
         
-        return (
-            self.cos_cached[:, :, :seq_len, :],
-            self.sin_cached[:, :, :seq_len, :]
-        )
+        cos = self.cos_cached[:, :, :seq_len, :]
+        sin = self.sin_cached[:, :, :seq_len, :]
+        return (cos, sin)
 
 
 def rotate_half(x: torch.Tensor) -> torch.Tensor:
