@@ -1,38 +1,80 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { 
+  type Project, 
+  type InsertProject,
+  type InfrastructureTemplate,
+  type InsertInfrastructureTemplate,
+  type BuildLog,
+  type InsertBuildLog,
+  projects,
+  infrastructureTemplates,
+  buildLogs
+} from "@shared/schema";
+import { db } from "../db";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Projects
+  createProject(project: InsertProject): Promise<Project>;
+  getProject(id: string): Promise<Project | undefined>;
+  updateProjectStatus(id: string, status: string, completedAt?: Date): Promise<void>;
+  getAllProjects(): Promise<Project[]>;
+  
+  // Infrastructure Templates
+  createInfrastructureTemplate(template: InsertInfrastructureTemplate): Promise<InfrastructureTemplate>;
+  getInfrastructureTemplateByProjectId(projectId: string): Promise<InfrastructureTemplate | undefined>;
+  
+  // Build Logs
+  createBuildLog(log: InsertBuildLog): Promise<BuildLog>;
+  getBuildLogsByProjectId(projectId: string): Promise<BuildLog[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  // Projects
+  async createProject(insertProject: InsertProject): Promise<Project> {
+    const [project] = await db.insert(projects).values(insertProject).returning();
+    return project;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getProject(id: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects).where(eq(projects.id, id));
+    return project;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async updateProjectStatus(id: string, status: string, completedAt?: Date): Promise<void> {
+    await db.update(projects)
+      .set({ status, completedAt })
+      .where(eq(projects.id, id));
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async getAllProjects(): Promise<Project[]> {
+    return await db.select().from(projects).orderBy(desc(projects.createdAt));
+  }
+
+  // Infrastructure Templates
+  async createInfrastructureTemplate(insertTemplate: InsertInfrastructureTemplate): Promise<InfrastructureTemplate> {
+    const [template] = await db.insert(infrastructureTemplates).values(insertTemplate).returning();
+    return template;
+  }
+
+  async getInfrastructureTemplateByProjectId(projectId: string): Promise<InfrastructureTemplate | undefined> {
+    const [template] = await db.select()
+      .from(infrastructureTemplates)
+      .where(eq(infrastructureTemplates.projectId, projectId));
+    return template;
+  }
+
+  // Build Logs
+  async createBuildLog(insertLog: InsertBuildLog): Promise<BuildLog> {
+    const [log] = await db.insert(buildLogs).values(insertLog).returning();
+    return log;
+  }
+
+  async getBuildLogsByProjectId(projectId: string): Promise<BuildLog[]> {
+    return await db.select()
+      .from(buildLogs)
+      .where(eq(buildLogs.projectId, projectId))
+      .orderBy(buildLogs.timestamp);
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
