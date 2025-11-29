@@ -88,6 +88,33 @@ Preferred communication style: Simple, everyday language.
 - Auto-scaling parameters (min/max instances)
 - Detected dependencies (databases, caches, queues)
 
+### AI Model Architecture (Platform Forge Engine)
+
+**Custom Transformer Model:**
+- Decoder-only transformer with 8 model sizes (tiny to master)
+- Expert/Master configurations: up to 48 layers, 2048 dim, 16k context
+- Advanced features: Multi-Query Attention (MQA), Mixture of Experts (MoE), Rotary Position Embeddings (RoPE)
+
+**Knowledge Base (220+ entries):**
+- 30 programming languages with expertise levels
+- 55 frameworks across all major languages
+- 72 infrastructure tools (AWS, GCP, Azure, CI/CD, containers)
+- 34 design patterns (creational, structural, behavioral, architectural, security)
+- 29 AI capabilities with accuracy metrics
+
+**Code Analyzer:**
+- Static analysis with AST parsing
+- Vulnerability detection (SQL injection, XSS, command injection, etc.)
+- Complexity metrics (cyclomatic, cognitive, maintainability index)
+- Code smell detection (long methods, duplicate code, deep nesting)
+- Performance analysis (N+1 queries, inefficient loops, memory leaks)
+- Dependency analysis with import graphs
+
+**Supported Languages (30):**
+- Tier 1 (Expert): Python, JavaScript, TypeScript, Java, Go, Rust
+- Tier 2 (Advanced): C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala
+- Tier 3 (Standard): R, Lua, Perl, Haskell, Elixir, Clojure, Dart, Julia, SQL, and more
+
 ### Development Tooling
 
 **Replit Integration:**
