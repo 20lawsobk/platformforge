@@ -164,6 +164,54 @@ Preferred communication style: Simple, everyday language.
 - ErrorLogger tracks patterns to identify recurring issues
 - Language/framework-specific handling (React, Django, Flask, Vue, Angular)
 
+**7. Deployment Engine (`server/ai_model/deployment_engine.py`):**
+An advanced deployment system that improves upon standard deployment methods (modeled after and improving upon Replit's deployment system):
+
+*Deployment Types:*
+- AUTOSCALE: Scale-to-zero with automatic scaling (pay per request)
+- RESERVED_VM: Always-on dedicated VM with predictable pricing
+- STATIC: CDN-hosted static files for websites
+- SCHEDULED: Cron-based scheduled task execution
+- EDGE: Edge functions deployed to 200+ global locations
+- SERVERLESS: Function-as-a-Service deployment
+
+*Key Improvements over Standard Systems:*
+- Faster cold starts (<100ms target vs 500ms+ typical)
+- Predictive auto-scaling (learns traffic patterns, scales before traffic spikes)
+- Multi-region deployment with geographic load balancing
+- Zero-downtime deployments (blue-green, canary, rolling strategies)
+- Edge function support for sub-10ms responses
+- Build caching and parallelization for faster deployments
+- Cost optimization with spot instances (up to 70% savings)
+- Automatic health checks and self-healing
+
+*Core Classes:*
+- `DeploymentEngine`: Main orchestration class for all deployment operations
+- `BuildOptimizer`: Layer caching, incremental builds, parallel compilation
+- `AutoScaler`: Predictive + reactive scaling with warm pool maintenance
+- `HealthChecker`: HTTP/TCP health checks, dependency monitoring, auto-recovery
+- `BlueGreenStrategy`: Instant traffic switching between environments
+- `CanaryStrategy`: Gradual rollout (1% -> 10% -> 50% -> 100%)
+- `RollingStrategy`: Replace instances one by one
+- `MultiRegionDeployer`: Deploy to 9+ regions with failover
+- `EdgeDeployer`: Deploy to 23+ edge locations globally
+
+*VM Sizes Available:*
+- NANO: 0.25 vCPU, 0.5GB RAM ($0.005/hr)
+- MICRO: 0.5 vCPU, 1GB RAM ($0.01/hr)
+- SMALL: 1 vCPU, 2GB RAM ($0.02/hr)
+- MEDIUM: 2 vCPU, 4GB RAM ($0.04/hr)
+- LARGE: 4 vCPU, 8GB RAM ($0.08/hr)
+- XLARGE: 8 vCPU, 16GB RAM ($0.16/hr)
+- XXLARGE: 16 vCPU, 32GB RAM ($0.32/hr)
+
+*Regions Supported:*
+- US: us-east-1, us-west-1, us-west-2
+- Europe: eu-west-1, eu-central-1
+- Asia Pacific: ap-southeast-1, ap-northeast-1, ap-south-1
+- South America: sa-east-1
+- Global Edge: 23+ edge locations worldwide
+
 ### Development Tooling
 
 **Replit Integration:**
