@@ -1,19 +1,39 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowRight, Github, Code2, Zap, Globe, Shield } from "lucide-react";
+import { ArrowRight, Github, Code2, Zap, Globe, Shield, Upload, FileCode, X, File, FolderUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
 import Layout from "@/components/Layout";
 import bgImage from "@assets/generated_images/cybernetic_schematic_background.png";
 
+const ACCEPTED_FILE_TYPES = [
+  '.js', '.jsx', '.ts', '.tsx', '.py', '.go', '.rs', '.rb', '.java', '.c', '.cpp', '.h',
+  '.css', '.scss', '.html', '.json', '.yaml', '.yml', '.md', '.txt', '.sh', '.bash',
+  '.sql', '.graphql', '.vue', '.svelte', '.php', '.swift', '.kt', '.scala'
+];
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
 export default function Home() {
   const [input, setInput] = useState("");
+  const [activeTab, setActiveTab] = useState<'github' | 'upload'>('github');
+  const [files, setFiles] = useState<File[]>([]);
+  const [projectName, setProjectName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const createProject = useMutation({
     mutationFn: async (sourceUrl: string) => {
@@ -42,20 +62,112 @@ export default function Home() {
     },
   });
 
-  const handleIgnite = (e: React.FormEvent) => {
+  const uploadProject = useMutation({
+    mutationFn: async ({ files, name }: { files: File[]; name: string }) => {
+      const formData = new FormData();
+      formData.append('name', name);
+      files.forEach((file) => {
+        formData.append('files', file);
+      });
+      
+      const res = await fetch('/api/projects/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) {
+        const error = await res.json().catch(() => ({ message: 'Failed to upload files' }));
+        throw new Error(error.message || 'Failed to upload files');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setLocation(`/builder?id=${data.id}`);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Upload Error",
+        description: error.message || "Failed to upload files",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleIgniteGithub = (e: React.FormEvent) => {
     e.preventDefault();
     if (input.trim()) {
       createProject.mutate(input);
     }
   };
 
+  const handleIgniteUpload = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (files.length === 0) {
+      toast({
+        title: "No files selected",
+        description: "Please select at least one file to upload",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!projectName.trim()) {
+      toast({
+        title: "Project name required",
+        description: "Please enter a name for your project",
+        variant: "destructive",
+      });
+      return;
+    }
+    uploadProject.mutate({ files, name: projectName });
+  };
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const droppedFiles = Array.from(e.dataTransfer.files).filter(file => {
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      return ACCEPTED_FILE_TYPES.includes(ext);
+    });
+    
+    if (droppedFiles.length > 0) {
+      setFiles(prev => [...prev, ...droppedFiles]);
+    } else {
+      toast({
+        title: "Invalid file types",
+        description: "Please upload code files (.js, .ts, .py, .go, etc.)",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      setFiles(prev => [...prev, ...selectedFiles]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const isLoading = createProject.isPending || uploadProject.isPending;
+
   return (
     <Layout>
       <section className="relative min-h-[90vh] flex items-center justify-center overflow-hidden bg-background">
-        {/* Background Asset */}
         <div className="absolute inset-0 z-0">
-           <div className="absolute inset-0 bg-grid-pattern opacity-[0.03] z-10 pointer-events-none" />
-          
+          <div className="absolute inset-0 bg-grid-pattern opacity-[0.03] z-10 pointer-events-none" />
           <img 
             src={bgImage} 
             alt="Schematic Background" 
@@ -90,32 +202,157 @@ export default function Home() {
               From scripts to auto-scaling Kubernetes clusters in one click.
             </p>
 
-            <form onSubmit={handleIgnite} className="flex flex-col sm:flex-row gap-4 max-w-xl mx-auto p-2 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm shadow-2xl">
-              <div className="relative flex-1">
-                <Code2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input 
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  placeholder="https://github.com/user/repo or ./script.js" 
-                  className="pl-10 h-12 bg-transparent border-none focus-visible:ring-0 text-base font-mono placeholder:text-muted-foreground/50"
-                  disabled={createProject.isPending}
-                />
-              </div>
-              <Button 
-                type="submit" 
-                size="lg" 
-                className="h-12 px-8 bg-primary text-primary-foreground hover:bg-primary/90 font-bold transition-all hover:scale-105 hover:shadow-[0_0_20px_-5px_var(--color-primary)]"
-                disabled={createProject.isPending}
-              >
-                {createProject.isPending ? (
-                  <>Processing...</>
-                ) : (
-                  <>Ignite <ArrowRight className="ml-2 h-4 w-4" /></>
-                )}
-              </Button>
-            </form>
+            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'github' | 'upload')} className="max-w-xl mx-auto">
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-white/5 border border-white/10">
+                <TabsTrigger 
+                  value="github" 
+                  data-testid="tab-github"
+                  className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary gap-2"
+                >
+                  <Github className="h-4 w-4" />
+                  GitHub URL
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="upload" 
+                  data-testid="tab-upload"
+                  className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary gap-2"
+                >
+                  <FolderUp className="h-4 w-4" />
+                  Upload Files
+                </TabsTrigger>
+              </TabsList>
 
-            <div className="mt-10 flex items-center justify-center gap-8 text-sm text-muted-foreground/60 font-mono">
+              <TabsContent value="github">
+                <form onSubmit={handleIgniteGithub} className="flex flex-col sm:flex-row gap-4 p-2 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm shadow-2xl">
+                  <div className="relative flex-1">
+                    <Code2 className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input 
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      placeholder="https://github.com/user/repo or ./script.js" 
+                      className="pl-10 h-12 bg-transparent border-none focus-visible:ring-0 text-base font-mono placeholder:text-muted-foreground/50"
+                      disabled={isLoading}
+                      data-testid="input-github-url"
+                    />
+                  </div>
+                  <Button 
+                    type="submit" 
+                    size="lg" 
+                    className="h-12 px-8 bg-primary text-primary-foreground font-bold transition-all"
+                    disabled={isLoading || !input.trim()}
+                    data-testid="button-ignite"
+                  >
+                    {createProject.isPending ? (
+                      <>Processing...</>
+                    ) : (
+                      <>Ignite <ArrowRight className="ml-2 h-4 w-4" /></>
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+
+              <TabsContent value="upload">
+                <form onSubmit={handleIgniteUpload} className="flex flex-col gap-4 p-4 rounded-xl bg-white/5 border border-white/10 backdrop-blur-sm shadow-2xl">
+                  <div className="relative">
+                    <FileCode className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                    <Input 
+                      value={projectName}
+                      onChange={(e) => setProjectName(e.target.value)}
+                      placeholder="Project Name" 
+                      className="pl-10 h-12 bg-transparent border border-white/10 focus-visible:ring-1 focus-visible:ring-primary text-base font-mono placeholder:text-muted-foreground/50"
+                      disabled={isLoading}
+                      data-testid="input-project-name"
+                    />
+                  </div>
+
+                  <div
+                    data-testid="dropzone-files"
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`
+                      relative flex flex-col items-center justify-center gap-3 p-8 
+                      border-2 border-dashed rounded-lg cursor-pointer transition-all duration-200
+                      ${isDragging 
+                        ? 'border-primary bg-primary/10 shadow-[0_0_20px_-5px_var(--color-primary)]' 
+                        : 'border-white/20 hover:border-primary/50 hover:bg-white/5'
+                      }
+                    `}
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={ACCEPTED_FILE_TYPES.join(',')}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                      disabled={isLoading}
+                    />
+                    <div className={`p-3 rounded-full ${isDragging ? 'bg-primary/20' : 'bg-white/5'} transition-colors`}>
+                      <Upload className={`h-6 w-6 ${isDragging ? 'text-primary' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-foreground">
+                        {isDragging ? 'Drop files here' : 'Drag & drop files or click to browse'}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Supports .js, .ts, .py, .go, .rs, .rb, .java, and more
+                      </p>
+                    </div>
+                  </div>
+
+                  {files.length > 0 && (
+                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto">
+                      {files.map((file, index) => (
+                        <div 
+                          key={`${file.name}-${index}`}
+                          data-testid={`file-item-${index}`}
+                          className="flex items-center justify-between gap-3 p-2 rounded-md bg-white/5 border border-white/10"
+                        >
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <File className="h-4 w-4 text-primary flex-shrink-0" />
+                            <span className="text-sm font-mono truncate">{file.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeFile(index);
+                              }}
+                              className="h-6 w-6"
+                              disabled={isLoading}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <Button 
+                    type="submit" 
+                    size="lg" 
+                    className="h-12 px-8 bg-primary text-primary-foreground font-bold transition-all w-full"
+                    disabled={isLoading || files.length === 0 || !projectName.trim()}
+                    data-testid="button-ignite"
+                  >
+                    {uploadProject.isPending ? (
+                      <>Uploading...</>
+                    ) : (
+                      <>Ignite <ArrowRight className="ml-2 h-4 w-4" /></>
+                    )}
+                  </Button>
+                </form>
+              </TabsContent>
+            </Tabs>
+
+            <div className="mt-10 flex items-center justify-center gap-8 text-sm text-muted-foreground/60 font-mono flex-wrap">
               <span className="flex items-center gap-2 hover:text-primary transition-colors cursor-default"><Github className="h-4 w-4" /> GitHub Supported</span>
               <span className="flex items-center gap-2 hover:text-primary transition-colors cursor-default"><Code2 className="h-4 w-4" /> Python / Node / Go</span>
               <span className="flex items-center gap-2 hover:text-primary transition-colors cursor-default"><Globe className="h-4 w-4" /> Edge Ready</span>
@@ -125,7 +362,7 @@ export default function Home() {
       </section>
 
       <section className="py-24 bg-secondary/30 border-t border-white/5 relative overflow-hidden">
-         <div className="absolute inset-0 bg-grid-pattern opacity-[0.02] pointer-events-none" />
+        <div className="absolute inset-0 bg-grid-pattern opacity-[0.02] pointer-events-none" />
         <div className="container px-4 md:px-8 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <Card className="p-6 bg-card/50 border-white/5 backdrop-blur-sm hover:border-primary/50 transition-all duration-300 group hover:-translate-y-1">
