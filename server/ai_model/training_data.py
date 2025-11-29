@@ -2118,3 +2118,121 @@ def get_training_stats() -> Dict:
         'batch_count_8': (total_samples + 7) // 8,
         'batch_count_4': (total_samples + 3) // 4,
     }
+
+
+def load_training_data_from_source(
+    source,
+    languages: List[str] = None,
+    min_length: int = 50,
+    include_builtin: bool = True
+) -> List[str]:
+    """
+    Load training data from external sources (directories, files, or zip archives).
+    
+    Args:
+        source: Path to directory, file, or zip archive (str, Path, or bytes)
+        languages: Optional list of languages to filter (e.g., ['python', 'javascript'])
+        min_length: Minimum content length for samples
+        include_builtin: Whether to include built-in training samples
+        
+    Returns:
+        List of code samples for training
+    """
+    from .file_processor import UniversalFileProcessor, extract_code_blocks
+    
+    samples = []
+    
+    if include_builtin:
+        samples.extend(get_all_training_data(shuffle=False))
+    
+    processor = UniversalFileProcessor(min_content_length=min_length)
+    result = processor.process(source)
+    
+    for f in result.files:
+        if languages:
+            if not f.language or f.language == 'unknown' or f.language not in languages:
+                continue
+        
+        blocks = extract_code_blocks(f.content, f.language)
+        if blocks:
+            samples.extend(blocks)
+        elif len(f.content.strip()) >= min_length:
+            samples.append(f.content.strip())
+    
+    return samples
+
+
+def load_from_zip(
+    zip_path,
+    languages: List[str] = None,
+    include_builtin: bool = True
+) -> List[str]:
+    """
+    Load training data from a zip archive.
+    
+    Args:
+        zip_path: Path to the zip file
+        languages: Optional list of languages to include
+        include_builtin: Whether to include built-in samples
+        
+    Returns:
+        List of code samples for training
+    """
+    return load_training_data_from_source(
+        zip_path,
+        languages=languages,
+        include_builtin=include_builtin
+    )
+
+
+def load_from_directory(
+    directory,
+    languages: List[str] = None,
+    include_builtin: bool = True
+) -> List[str]:
+    """
+    Load training data from a directory recursively.
+    
+    Args:
+        directory: Path to the directory
+        languages: Optional list of languages to include
+        include_builtin: Whether to include built-in samples
+        
+    Returns:
+        List of code samples for training
+    """
+    return load_training_data_from_source(
+        directory,
+        languages=languages,
+        include_builtin=include_builtin
+    )
+
+
+def get_extended_training_stats(source=None) -> Dict:
+    """
+    Get comprehensive statistics including external sources.
+    
+    Args:
+        source: Optional external source (directory, file, or zip)
+        
+    Returns:
+        Dictionary with detailed statistics
+    """
+    stats = get_training_stats()
+    
+    if source:
+        from .file_processor import UniversalFileProcessor
+        
+        processor = UniversalFileProcessor()
+        result = processor.process(source)
+        
+        stats['external_source'] = {
+            'total_files': result.total_files,
+            'processed_files': result.processed_files,
+            'skipped_files': result.skipped_files,
+            'errors': len(result.errors),
+            'languages': result.stats.get('languages', {}),
+            'total_content': result.stats.get('total_content_length', 0),
+        }
+    
+    return stats
