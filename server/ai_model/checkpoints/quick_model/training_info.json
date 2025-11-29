@@ -1,0 +1,16 @@
+{
+  "model_size": "tiny",
+  "vocab_size": 4328,
+  "num_epochs": 5,
+  "batch_size": 4,
+  "learning_rate": 0.001,
+  "max_length": 128,
+  "training_time_minutes": 0.14855720202128092,
+  "best_loss": 8.34716796875,
+  "final_epoch": 5,
+  "training_date": "2025-11-29T01:25:28.907500",
+  "device": "cpu",
+  "total_samples": 33,
+  "train_samples": 29,
+  "val_samples": 4
+}
