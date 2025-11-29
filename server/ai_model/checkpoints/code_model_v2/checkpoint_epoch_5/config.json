@@ -1,8 +1,0 @@
-{
-  "vocab_size": 8034,
-  "embed_dim": 256,
-  "num_layers": 4,
-  "num_heads": 4,
-  "max_seq_len": 2048,
-  "pad_token_id": 0
-}
