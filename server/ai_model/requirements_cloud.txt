@@ -1,0 +1,22 @@
+# Cloud GPU Training Requirements
+# Install with: pip install -r requirements_cloud.txt
+
+# PyTorch with CUDA support
+# For CUDA 11.8:
+--extra-index-url https://download.pytorch.org/whl/cu118
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Core dependencies
+numpy>=1.24.0
+tqdm>=4.65.0
+tiktoken>=0.5.0
+
+# Optional: Monitoring and logging
+# tensorboard>=2.14.0
+# wandb>=0.15.0
+
+# Optional: Faster data loading
+# datasets>=2.14.0
+# tokenizers>=0.14.0
