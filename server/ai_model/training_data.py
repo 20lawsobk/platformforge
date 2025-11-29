@@ -782,8 +782,10 @@ EXPOSE 8000
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:create_app()"]''',
 ]
 
-def get_all_training_data():
-    """Get all training samples as a single list."""
+import random
+
+def get_all_training_data(shuffle: bool = True, seed: int = 42):
+    """Get all training samples as a single list with optional shuffling."""
     all_samples = []
     all_samples.extend(PYTHON_SAMPLES)
     all_samples.extend(JAVASCRIPT_SAMPLES)
@@ -793,6 +795,11 @@ def get_all_training_data():
     all_samples.extend(TERRAFORM_SAMPLES)
     all_samples.extend(KUBERNETES_SAMPLES)
     all_samples.extend(DOCKER_SAMPLES)
+    
+    if shuffle:
+        rng = random.Random(seed)
+        rng.shuffle(all_samples)
+    
     return all_samples
 
 def get_training_data_by_category():

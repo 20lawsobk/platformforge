@@ -17,7 +17,19 @@ from .transformer import create_model, CodeTransformer
 from .inference import CodeGenerator, AIAssistant
 
 MODEL_DIR = Path(__file__).parent / "checkpoints"
+TRAINED_MODEL = MODEL_DIR / "code_model" / "best_model"
+QUICK_MODEL = MODEL_DIR / "quick_model" / "best_model"
 DEFAULT_CHECKPOINT = MODEL_DIR / "demo_model"
+
+def get_best_checkpoint() -> Optional[Path]:
+    """Get the best available checkpoint."""
+    if TRAINED_MODEL.exists():
+        return TRAINED_MODEL
+    if QUICK_MODEL.exists():
+        return QUICK_MODEL
+    if DEFAULT_CHECKPOINT.exists():
+        return DEFAULT_CHECKPOINT
+    return None
 
 
 class ModelState:
@@ -45,22 +57,52 @@ class ModelState:
             raise RuntimeError("Model not initialized. Call initialize() first.")
         return self._assistant
         
-    def initialize(self, checkpoint_path: Optional[str] = None):
+    def initialize(self, checkpoint_path: Optional[str] = None, force: bool = False):
         """Initialize the model with thread safety."""
         with self._lock:
-            if self.is_initialized:
+            if self.is_initialized and not force:
                 return
             
             gen = CodeGenerator()
+            loaded_from = None
             
             if checkpoint_path and Path(checkpoint_path).exists():
-                gen.load(checkpoint_path)
+                if self._validate_checkpoint(checkpoint_path):
+                    print(f"Loading model from: {checkpoint_path}")
+                    gen.load(checkpoint_path)
+                    loaded_from = checkpoint_path
+                else:
+                    raise ValueError(f"Invalid checkpoint: {checkpoint_path}")
             else:
-                self._create_demo_model(gen)
+                best_checkpoint = get_best_checkpoint()
+                if best_checkpoint and self._validate_checkpoint(str(best_checkpoint)):
+                    print(f"Loading trained model from: {best_checkpoint}")
+                    gen.load(str(best_checkpoint))
+                    loaded_from = str(best_checkpoint)
+                else:
+                    print("No valid trained model found, creating demo model...")
+                    self._create_demo_model(gen)
+                    loaded_from = "demo"
             
             self._generator = gen
             self._assistant = AIAssistant(gen)
             self.is_initialized = True
+            self.loaded_checkpoint = loaded_from
+            print(f"Model initialization complete (source: {loaded_from})")
+    
+    def reload(self, checkpoint_path: Optional[str] = None):
+        """Reload model from checkpoint (for hot-reloading after training)."""
+        with self._lock:
+            self.is_initialized = False
+            self._generator = None
+            self._assistant = None
+        self.initialize(checkpoint_path, force=True)
+    
+    def _validate_checkpoint(self, path: str) -> bool:
+        """Validate checkpoint directory has required files."""
+        checkpoint_dir = Path(path)
+        required_files = ['model.pt', 'tokenizer.json', 'config.json']
+        return all((checkpoint_dir / f).exists() for f in required_files)
     
     def _create_demo_model(self, gen: CodeGenerator):
         """Create a demo model for testing."""
@@ -166,6 +208,17 @@ class AIModelHandler(BaseHTTPRequestHandler):
                 checkpoint = body.get('checkpoint_path')
                 model_state.initialize(checkpoint)
                 self._send_json({'status': 'initialized'})
+            except Exception as e:
+                self._send_json({'error': str(e)}, 500)
+        
+        elif path == '/reload':
+            try:
+                checkpoint = body.get('checkpoint_path')
+                model_state.reload(checkpoint)
+                self._send_json({
+                    'status': 'reloaded',
+                    'checkpoint': getattr(model_state, 'loaded_checkpoint', None)
+                })
             except Exception as e:
                 self._send_json({'error': str(e)}, 500)
         

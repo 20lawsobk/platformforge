@@ -84,6 +84,30 @@ interface HealthStatus {
   is_training: boolean;
 }
 
+let isModelAvailable = true;
+let lastHealthCheck = 0;
+const HEALTH_CHECK_INTERVAL = 30000;
+
+async function checkModelHealth(): Promise<boolean> {
+  const now = Date.now();
+  if (now - lastHealthCheck < HEALTH_CHECK_INTERVAL && !isModelAvailable) {
+    return false;
+  }
+  lastHealthCheck = now;
+  
+  try {
+    const response = await fetch(`${AI_MODEL_URL}/health`, {
+      method: 'GET',
+      signal: AbortSignal.timeout(2000),
+    });
+    isModelAvailable = response.ok;
+    return isModelAvailable;
+  } catch {
+    isModelAvailable = false;
+    return false;
+  }
+}
+
 async function fetchFromModel<T>(
   endpoint: string,
   method: 'GET' | 'POST' = 'GET',
@@ -94,6 +118,7 @@ async function fetchFromModel<T>(
     headers: {
       'Content-Type': 'application/json',
     },
+    signal: AbortSignal.timeout(30000),
   };
 
   if (body) {
@@ -108,11 +133,13 @@ async function fetchFromModel<T>(
       throw new Error(error.error || `HTTP ${response.status}`);
     }
 
+    isModelAvailable = true;
     return response.json();
   } catch (error) {
+    isModelAvailable = false;
     if (error instanceof Error) {
-      if (error.message.includes('ECONNREFUSED')) {
-        throw new Error('AI Model service not available. Please ensure the Python AI server is running.');
+      if (error.message.includes('ECONNREFUSED') || error.name === 'TimeoutError') {
+        throw new Error('AI Model service not available');
       }
       throw error;
     }
@@ -121,6 +148,20 @@ async function fetchFromModel<T>(
 }
 
 export const aiModelClient = {
+  /**
+   * Check if the AI model service is available
+   */
+  isAvailable(): boolean {
+    return isModelAvailable;
+  },
+
+  /**
+   * Force a health check
+   */
+  async checkHealth(): Promise<boolean> {
+    return checkModelHealth();
+  },
+
   /**
    * Check if the AI model service is healthy
    */
@@ -323,5 +364,66 @@ For AI-powered fixes, please start the neural network model.
 
 Original code:
 ${code}`;
+  },
+};
+
+/**
+ * AI client with automatic fallbacks when the model is offline
+ */
+export const aiWithFallback = {
+  async generate(request: GenerateRequest): Promise<GenerateResponse> {
+    try {
+      return await aiModelClient.generate(request);
+    } catch {
+      return {
+        generated_text: fallbackResponses.generate(request.prompt),
+        prompt: request.prompt,
+      };
+    }
+  },
+
+  async chat(request: ChatRequest): Promise<ChatResponse> {
+    try {
+      return await aiModelClient.chat(request);
+    } catch {
+      return {
+        response: fallbackResponses.chat(request.message),
+        message: request.message,
+      };
+    }
+  },
+
+  async complete(request: CompleteRequest): Promise<CompleteResponse> {
+    try {
+      return await aiModelClient.complete(request);
+    } catch {
+      return {
+        completion: fallbackResponses.complete(request.code, request.language ?? 'python'),
+        original_code: request.code,
+      };
+    }
+  },
+
+  async explain(request: ExplainRequest): Promise<ExplainResponse> {
+    try {
+      return await aiModelClient.explain(request);
+    } catch {
+      return {
+        explanation: fallbackResponses.explain(request.code),
+        code: request.code,
+      };
+    }
+  },
+
+  async fix(request: FixRequest): Promise<FixResponse> {
+    try {
+      return await aiModelClient.fix(request);
+    } catch {
+      return {
+        fixed_code: fallbackResponses.fix(request.code, request.error),
+        original_code: request.code,
+        error: request.error,
+      };
+    }
   },
 };
