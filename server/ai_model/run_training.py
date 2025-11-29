@@ -1,6 +1,6 @@
 """
 Training Script for Custom Code Generation Model
-Runs the full training pipeline with comprehensive data
+Runs the full training pipeline with comprehensive data organized into batches
 """
 
 import os
@@ -15,7 +15,7 @@ import torch
 from .tokenizer import CodeTokenizer
 from .transformer import create_model
 from .trainer import Trainer, CodeDataset
-from .training_data import get_all_training_data, get_training_data_by_category
+from .training_data import get_all_training_data, get_training_data_by_category, create_training_batches, get_training_stats
 
 CHECKPOINT_DIR = Path(__file__).parent / "checkpoints"
 
@@ -49,15 +49,25 @@ def train_model(
     print()
     
     print("Loading training data...")
-    all_data = get_all_training_data()
+    stats = get_training_stats()
+    all_data = get_all_training_data(shuffle=True)
     data_by_category = get_training_data_by_category()
+    training_batches = create_training_batches(batch_size=batch_size)
     
-    print(f"Total samples: {len(all_data)}")
-    for category, samples in data_by_category.items():
-        print(f"  - {category}: {len(samples)} samples")
+    print(f"Total samples: {stats['total_samples']}")
+    print(f"Total characters: {stats['total_characters']:,}")
+    print(f"Average sample length: {stats['avg_sample_length']} chars")
+    print()
+    print("Samples by category:")
+    for category, count in stats['categories'].items():
+        print(f"  - {category}: {count} samples")
+    print()
+    print(f"Training batches (size={batch_size}): {len(training_batches)} batches")
+    for i, batch in enumerate(training_batches):
+        print(f"  Batch {i+1}: {len(batch)} samples")
     print()
     
-    train_size = int(len(all_data) * 0.9)
+    train_size = int(len(all_data) * 0.85)
     train_data = all_data[:train_size]
     val_data = all_data[train_size:]
     

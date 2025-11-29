@@ -17,12 +17,15 @@ from .transformer import create_model, CodeTransformer
 from .inference import CodeGenerator, AIAssistant
 
 MODEL_DIR = Path(__file__).parent / "checkpoints"
+TRAINED_MODEL_V2 = MODEL_DIR / "code_model_v2" / "best_model"
 TRAINED_MODEL = MODEL_DIR / "code_model" / "best_model"
 QUICK_MODEL = MODEL_DIR / "quick_model" / "best_model"
 DEFAULT_CHECKPOINT = MODEL_DIR / "demo_model"
 
 def get_best_checkpoint() -> Optional[Path]:
-    """Get the best available checkpoint."""
+    """Get the best available checkpoint (prioritizes latest trained model)."""
+    if TRAINED_MODEL_V2.exists():
+        return TRAINED_MODEL_V2
     if TRAINED_MODEL.exists():
         return TRAINED_MODEL
     if QUICK_MODEL.exists():
