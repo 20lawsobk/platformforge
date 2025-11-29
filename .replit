@@ -7,7 +7,7 @@ channel = "stable-25_05"
 packages = ["cargo", "libiconv", "rustc"]
 
 [deployment]
-deploymentTarget = "autoscale"
+deploymentTarget = "static"
 build = ["npm", "run", "build"]
 publicDir = "dist/public"
 run = ["npm", "run", "start"]
