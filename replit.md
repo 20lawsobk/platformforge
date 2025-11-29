@@ -115,6 +115,55 @@ Preferred communication style: Simple, everyday language.
 - Tier 2 (Advanced): C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala
 - Tier 3 (Standard): R, Lua, Perl, Haskell, Elixir, Clojure, Dart, Julia, SQL, and more
 
+### User Experience Systems (Addressing Common Frustrations)
+
+**1. Safety Guards (`server/ai_model/safety_guards.py`):**
+- DestructiveActionDetector with 80+ dangerous pattern matchers
+- Categories: DATABASE, FILESYSTEM, GIT, CLOUD_INFRA, DEPLOYMENT, CREDENTIALS, SYSTEM, CODE_EXECUTION
+- ActionValidator checks proposed actions against user intent
+- SafetyConfig with strict/normal/permissive levels
+- Confirmation prompts before any risky operation
+- Safe alternatives suggested (e.g., `git push --force` → `git push --force-with-lease`)
+
+**2. Cost Estimator (`server/ai_model/cost_estimator.py`):**
+- CostEstimator provides estimates before any action (min/max/expected cost)
+- CostTracker with real-time spending alerts at 50%, 75%, 90%, 100%
+- BudgetManager with per-action, daily, monthly limits
+- CostOptimizer suggests batching and caching strategies
+- Four pricing models: Token, Compute, Storage, Action-based
+
+**3. Checkpoint System (`server/ai_model/checkpoint_system.py`):**
+- Automatic checkpoints before destructive actions
+- FileSnapshot with hash-based deduplication and compression
+- 13 auto-checkpoint rules (file deletions, database changes, deployments, git operations)
+- DiffViewer for comparing current state to any checkpoint
+- Configurable retention policy (keep last N, keep for X days)
+- Quick rollback functions: `rollback_to_last()`, `get_recovery_options()`
+
+**4. Context Manager (`server/ai_model/context_manager.py`):**
+- 16k token context window with priority-based management
+- ProjectContext captures languages, frameworks, coding style, user preferences
+- ConversationMemory tracks what worked/failed with correction detection
+- LearningMemory stores mistakes and applies learned patterns
+- InstructionTracker persists user instructions across sessions (DO, DON'T, PREFER, AVOID)
+- Conflict detection for proposed actions vs stored instructions
+
+**5. Instruction Validator (`server/ai_model/instruction_validator.py`):**
+- Parses natural language instructions with negation detection
+- Recognizes 22+ negative patterns ("don't", "never", "avoid", "must not", etc.)
+- EmphasisDetector for frustrated user patterns (CAPS, "I SAID", "STOP", etc.)
+- ComplianceChecker verifies generated code against instructions
+- Violation tracking with escalating priority for repeated issues
+- ValidationResult with suggested compliant alternatives
+
+**6. Error Handler (`server/ai_model/error_handler.py`):**
+- 110+ error patterns with friendly messages (Python, JS, Go, Rust, frameworks)
+- UserFriendlyError with non-technical descriptions and step-by-step solutions
+- SelfServiceResolver with auto-fix capabilities for common issues
+- "Did you mean X?" suggestions for typos
+- ErrorLogger tracks patterns to identify recurring issues
+- Language/framework-specific handling (React, Django, Flask, Vue, Angular)
+
 ### Development Tooling
 
 **Replit Integration:**
