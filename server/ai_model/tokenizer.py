@@ -250,8 +250,33 @@ class CodeTokenizer(BytePairTokenizer):
             '<PYTHON>': len(self.vocab) + 3,
             '<JAVASCRIPT>': len(self.vocab) + 4,
             '<TYPESCRIPT>': len(self.vocab) + 5,
-            '<RUST>': len(self.vocab) + 6,
-            '<GO>': len(self.vocab) + 7,
+            '<JAVA>': len(self.vocab) + 6,
+            '<C>': len(self.vocab) + 7,
+            '<CPP>': len(self.vocab) + 8,
+            '<CSHARP>': len(self.vocab) + 9,
+            '<GO>': len(self.vocab) + 10,
+            '<RUST>': len(self.vocab) + 11,
+            '<RUBY>': len(self.vocab) + 12,
+            '<PHP>': len(self.vocab) + 13,
+            '<SWIFT>': len(self.vocab) + 14,
+            '<KOTLIN>': len(self.vocab) + 15,
+            '<SCALA>': len(self.vocab) + 16,
+            '<R>': len(self.vocab) + 17,
+            '<LUA>': len(self.vocab) + 18,
+            '<PERL>': len(self.vocab) + 19,
+            '<HASKELL>': len(self.vocab) + 20,
+            '<ELIXIR>': len(self.vocab) + 21,
+            '<CLOJURE>': len(self.vocab) + 22,
+            '<DART>': len(self.vocab) + 23,
+            '<JULIA>': len(self.vocab) + 24,
+            '<BASH>': len(self.vocab) + 25,
+            '<SQL>': len(self.vocab) + 26,
+            '<ASSEMBLY>': len(self.vocab) + 27,
+            '<OCAML>': len(self.vocab) + 28,
+            '<FSHARP>': len(self.vocab) + 29,
+            '<ERLANG>': len(self.vocab) + 30,
+            '<ZIG>': len(self.vocab) + 31,
+            '<NIM>': len(self.vocab) + 32,
         }
         
         self.vocab.update(self.code_special_tokens)
@@ -317,7 +342,14 @@ class CodeTokenizer(BytePairTokenizer):
         
         result = '\n'.join(processed_lines)
         
-        for token in ['<PYTHON>', '<JAVASCRIPT>', '<TYPESCRIPT>', '<RUST>', '<GO>']:
+        for token in [
+            '<PYTHON>', '<JAVASCRIPT>', '<TYPESCRIPT>', '<JAVA>', '<C>',
+            '<CPP>', '<CSHARP>', '<GO>', '<RUST>', '<RUBY>',
+            '<PHP>', '<SWIFT>', '<KOTLIN>', '<SCALA>', '<R>',
+            '<LUA>', '<PERL>', '<HASKELL>', '<ELIXIR>', '<CLOJURE>',
+            '<DART>', '<JULIA>', '<BASH>', '<SQL>', '<ASSEMBLY>',
+            '<OCAML>', '<FSHARP>', '<ERLANG>', '<ZIG>', '<NIM>'
+        ]:
             result = result.replace(token, '')
         
         if skip_special_tokens:
