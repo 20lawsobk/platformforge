@@ -110,10 +110,18 @@ Preferred communication style: Simple, everyday language.
 - Performance analysis (N+1 queries, inefficient loops, memory leaks)
 - Dependency analysis with import graphs
 
-**Supported Languages (30):**
-- Tier 1 (Expert): Python, JavaScript, TypeScript, Java, Go, Rust
-- Tier 2 (Advanced): C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala
-- Tier 3 (Standard): R, Lua, Perl, Haskell, Elixir, Clojure, Dart, Julia, SQL, and more
+**Supported Languages (28 with Training Data):**
+- Tier 1 (Expert): Python (46 samples), JavaScript (20), TypeScript (15), Java (17), Go (19), Rust (19)
+- Tier 2 (Advanced): C (16), C++ (15), C# (16), Ruby (15), PHP (15), Swift (14), Kotlin (13), Scala (13)
+- Tier 3 (Standard): R (12), Lua (12), Perl (12), Haskell (12), Elixir (12), Clojure (12), Dart (12), Julia (12), SQL (15), Shell (13)
+- Infrastructure: Terraform (15), Kubernetes (15), Docker (10)
+- Framework: React (15)
+
+**Training Data Statistics:**
+- Total Samples: 432 high-quality code samples
+- Total Characters: 350,103
+- Average Sample Length: 810 characters
+- Sample Distribution: 31.5% Tier 1, 27.1% Tier 2, 28.7% Tier 3, 9.3% Infrastructure, 3.5% Framework
 
 ### User Experience Systems (Addressing Common Frustrations)
 
