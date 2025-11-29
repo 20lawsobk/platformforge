@@ -138,23 +138,31 @@ class CodeDatasetCloud(Dataset):
         data: List[str],
         tokenizer: CodeTokenizer,
         max_length: int = 1024,
-        stride: int = 512,
+        stride: int = 256,
     ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.examples = []
         
-        # Create overlapping windows for better context learning
+        # Create examples from each text sample
         for text in data:
             tokens = tokenizer.encode(text, add_special_tokens=True)
             
-            # Sliding window with stride
-            for i in range(0, max(1, len(tokens) - max_length + 1), stride):
-                chunk = tokens[i:i + max_length]
-                if len(chunk) >= 32:  # Minimum sequence length
-                    # Pad if necessary
-                    if len(chunk) < max_length:
-                        chunk = chunk + [tokenizer.pad_token_id] * (max_length - len(chunk))
+            if len(tokens) < 16:  # Skip very short samples
+                continue
+            
+            # For short sequences, just pad to max_length
+            if len(tokens) <= max_length:
+                chunk = tokens + [tokenizer.pad_token_id] * (max_length - len(tokens))
+                self.examples.append(chunk)
+            else:
+                # For long sequences, use sliding window
+                for i in range(0, len(tokens) - max_length + 1, stride):
+                    chunk = tokens[i:i + max_length]
+                    self.examples.append(chunk)
+                # Also include the last chunk if not already covered
+                if len(tokens) > max_length and (len(tokens) - max_length) % stride != 0:
+                    chunk = tokens[-max_length:]
                     self.examples.append(chunk)
         
         print(f"Created {len(self.examples)} training examples from {len(data)} samples")
@@ -409,8 +417,10 @@ class CloudTrainer:
             # Forward pass with mixed precision
             with autocast(enabled=self.use_amp):
                 outputs = self.model(input_ids)
+                # Handle both dict output (with 'logits' key) and direct tensor output
+                logits = outputs['logits'] if isinstance(outputs, dict) else outputs
                 loss = nn.functional.cross_entropy(
-                    outputs.view(-1, outputs.size(-1)),
+                    logits.view(-1, logits.size(-1)),
                     labels.view(-1),
                     ignore_index=self.tokenizer.pad_token_id,
                 )
@@ -462,8 +472,9 @@ class CloudTrainer:
             
             with autocast(enabled=self.use_amp):
                 outputs = self.model(input_ids)
+                logits = outputs['logits'] if isinstance(outputs, dict) else outputs
                 loss = nn.functional.cross_entropy(
-                    outputs.view(-1, outputs.size(-1)),
+                    logits.view(-1, logits.size(-1)),
                     labels.view(-1),
                     ignore_index=self.tokenizer.pad_token_id,
                 )
