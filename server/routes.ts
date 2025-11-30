@@ -2,7 +2,19 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { z } from "zod";
-import { insertProjectSchema, insertBuildLogSchema } from "@shared/schema";
+import { 
+  insertProjectSchema, 
+  insertBuildLogSchema,
+  insertKvNamespaceSchema,
+  insertKvEntrySchema,
+  insertObjectBucketSchema,
+  insertStorageObjectSchema,
+  insertSecurityScanSchema,
+  insertSecurityFindingSchema,
+  insertDeploymentTargetSchema,
+  insertDeploymentSchema,
+  insertDeploymentRunSchema
+} from "@shared/schema";
 import { aiModelClient, fallbackResponses } from "./ai/model-client";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import multer from 'multer';
@@ -395,7 +407,822 @@ export async function registerRoutes(
     }
   });
 
+  // ============================================
+  // KV Store Endpoints
+  // ============================================
+
+  // List user's KV namespaces
+  app.get("/api/storage/kv/namespaces", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const namespaces = await storage.getKvNamespacesByUserId(userId);
+      res.json(namespaces);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch namespaces" });
+    }
+  });
+
+  // Create KV namespace
+  app.post("/api/storage/kv/namespaces", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertKvNamespaceSchema.parse({ ...req.body, userId });
+      const namespace = await storage.createKvNamespace(data);
+      res.json(namespace);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create namespace" });
+      }
+    }
+  });
+
+  // Get KV namespace by ID
+  app.get("/api/storage/kv/namespaces/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const namespace = await storage.getKvNamespace(req.params.id);
+      if (!namespace) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      if (namespace.userId !== userId) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      res.json(namespace);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch namespace" });
+    }
+  });
+
+  // Delete KV namespace
+  app.delete("/api/storage/kv/namespaces/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const namespace = await storage.getKvNamespace(req.params.id);
+      if (!namespace) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      if (namespace.userId !== userId) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      await storage.deleteKvNamespace(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete namespace" });
+    }
+  });
+
+  // List entries in KV namespace
+  app.get("/api/storage/kv/namespaces/:id/entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const namespace = await storage.getKvNamespace(req.params.id);
+      if (!namespace) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      if (namespace.userId !== userId) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      const entries = await storage.getKvEntriesByNamespaceId(req.params.id);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch entries" });
+    }
+  });
+
+  // Create KV entry in namespace
+  app.post("/api/storage/kv/namespaces/:id/entries", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const namespace = await storage.getKvNamespace(req.params.id);
+      if (!namespace) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      if (namespace.userId !== userId) {
+        return res.status(404).json({ error: "Namespace not found" });
+      }
+      const data = insertKvEntrySchema.parse({ ...req.body, namespaceId: req.params.id });
+      const entry = await storage.createKvEntry(data);
+      res.json(entry);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create entry" });
+      }
+    }
+  });
+
+  // Update KV entry value
+  app.put("/api/storage/kv/entries/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const entries = await storage.getKvEntriesByNamespaceId(req.params.id);
+      const entry = entries.find(e => e.id === req.params.id);
+      if (!entry) {
+        const allNamespaces = await storage.getKvNamespacesByUserId(userId);
+        let foundEntry = null;
+        for (const ns of allNamespaces) {
+          const nsEntries = await storage.getKvEntriesByNamespaceId(ns.id);
+          foundEntry = nsEntries.find(e => e.id === req.params.id);
+          if (foundEntry) break;
+        }
+        if (!foundEntry) {
+          return res.status(404).json({ error: "Entry not found" });
+        }
+        const namespace = await storage.getKvNamespace(foundEntry.namespaceId);
+        if (!namespace || namespace.userId !== userId) {
+          return res.status(404).json({ error: "Entry not found" });
+        }
+        const { value } = req.body;
+        if (!value || typeof value !== 'string') {
+          return res.status(400).json({ error: "Value is required" });
+        }
+        await storage.updateKvEntry(req.params.id, value);
+        res.json({ success: true });
+        return;
+      }
+      const namespace = await storage.getKvNamespace(entry.namespaceId);
+      if (!namespace || namespace.userId !== userId) {
+        return res.status(404).json({ error: "Entry not found" });
+      }
+      const { value } = req.body;
+      if (!value || typeof value !== 'string') {
+        return res.status(400).json({ error: "Value is required" });
+      }
+      await storage.updateKvEntry(req.params.id, value);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update entry" });
+    }
+  });
+
+  // Delete KV entry
+  app.delete("/api/storage/kv/entries/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const allNamespaces = await storage.getKvNamespacesByUserId(userId);
+      let foundEntry = null;
+      for (const ns of allNamespaces) {
+        const nsEntries = await storage.getKvEntriesByNamespaceId(ns.id);
+        foundEntry = nsEntries.find(e => e.id === req.params.id);
+        if (foundEntry) break;
+      }
+      if (!foundEntry) {
+        return res.status(404).json({ error: "Entry not found" });
+      }
+      const namespace = await storage.getKvNamespace(foundEntry.namespaceId);
+      if (!namespace || namespace.userId !== userId) {
+        return res.status(404).json({ error: "Entry not found" });
+      }
+      await storage.deleteKvEntry(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete entry" });
+    }
+  });
+
+  // ============================================
+  // Object Storage Endpoints
+  // ============================================
+
+  // List user's buckets
+  app.get("/api/storage/buckets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const buckets = await storage.getObjectBucketsByUserId(userId);
+      res.json(buckets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch buckets" });
+    }
+  });
+
+  // Create bucket
+  app.post("/api/storage/buckets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertObjectBucketSchema.parse({ ...req.body, userId });
+      const bucket = await storage.createObjectBucket(data);
+      res.json(bucket);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create bucket" });
+      }
+    }
+  });
+
+  // Get bucket by ID
+  app.get("/api/storage/buckets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bucket = await storage.getObjectBucket(req.params.id);
+      if (!bucket) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      if (bucket.userId !== userId) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      res.json(bucket);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch bucket" });
+    }
+  });
+
+  // Update bucket
+  app.put("/api/storage/buckets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bucket = await storage.getObjectBucket(req.params.id);
+      if (!bucket) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      if (bucket.userId !== userId) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      const { name, description, isPublic } = req.body;
+      await storage.updateObjectBucket(req.params.id, { name, description, isPublic });
+      const updatedBucket = await storage.getObjectBucket(req.params.id);
+      res.json(updatedBucket);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update bucket" });
+    }
+  });
+
+  // Delete bucket
+  app.delete("/api/storage/buckets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bucket = await storage.getObjectBucket(req.params.id);
+      if (!bucket) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      if (bucket.userId !== userId) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      await storage.deleteObjectBucket(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete bucket" });
+    }
+  });
+
+  // List objects in bucket
+  app.get("/api/storage/buckets/:id/objects", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bucket = await storage.getObjectBucket(req.params.id);
+      if (!bucket) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      if (bucket.userId !== userId) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      const objects = await storage.getStorageObjectsByBucketId(req.params.id);
+      res.json(objects);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch objects" });
+    }
+  });
+
+  // Create object in bucket
+  app.post("/api/storage/buckets/:id/objects", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const bucket = await storage.getObjectBucket(req.params.id);
+      if (!bucket) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      if (bucket.userId !== userId) {
+        return res.status(404).json({ error: "Bucket not found" });
+      }
+      const data = insertStorageObjectSchema.parse({ ...req.body, bucketId: req.params.id });
+      const storageObject = await storage.createStorageObject(data);
+      res.json(storageObject);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create object" });
+      }
+    }
+  });
+
+  // Delete object
+  app.delete("/api/storage/objects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const storageObject = await storage.getStorageObject(req.params.id);
+      if (!storageObject) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const bucket = await storage.getObjectBucket(storageObject.bucketId);
+      if (!bucket || bucket.userId !== userId) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      await storage.deleteStorageObject(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete object" });
+    }
+  });
+
+  // ============================================
+  // Security Scanner Endpoints
+  // ============================================
+
+  // Trigger a new security scan
+  app.post("/api/security/scan", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { projectId } = req.body;
+      
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+
+      const project = await storage.getProject(projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.userId && project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const scan = await storage.createSecurityScan({
+        projectId,
+        status: 'running',
+        totalFindings: 0,
+        criticalCount: 0,
+        highCount: 0,
+        mediumCount: 0,
+        lowCount: 0,
+      });
+
+      runSecurityScan(scan.id, projectId).catch(console.error);
+
+      res.json(scan);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create security scan" });
+      }
+    }
+  });
+
+  // Get all scans for a project
+  app.get("/api/projects/:id/security/scans", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.userId && project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const scans = await storage.getSecurityScansByProjectId(req.params.id);
+      res.json(scans);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch security scans" });
+    }
+  });
+
+  // Get all findings for a project
+  app.get("/api/projects/:id/security/findings", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.userId && project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const findings = await storage.getSecurityFindingsByProjectId(req.params.id);
+      res.json(findings);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch security findings" });
+    }
+  });
+
+  // Get a specific scan
+  app.get("/api/security/scans/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const scan = await storage.getSecurityScan(req.params.id);
+      if (!scan) {
+        return res.status(404).json({ error: "Scan not found" });
+      }
+      const project = await storage.getProject(scan.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Scan not found" });
+      }
+      res.json(scan);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch security scan" });
+    }
+  });
+
+  // Update finding status
+  app.patch("/api/security/findings/:id/status", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { status } = req.body;
+      
+      if (!status || !['open', 'resolved', 'ignored'].includes(status)) {
+        return res.status(400).json({ error: "Invalid status. Must be 'open', 'resolved', or 'ignored'" });
+      }
+
+      const findings = await storage.getSecurityFindingsByProjectId('');
+      let finding = null;
+      const userProjects = await storage.getProjectsByUserId(userId);
+      
+      for (const proj of userProjects) {
+        const projectFindings = await storage.getSecurityFindingsByProjectId(proj.id);
+        finding = projectFindings.find(f => f.id === req.params.id);
+        if (finding) break;
+      }
+      
+      if (!finding) {
+        return res.status(404).json({ error: "Finding not found" });
+      }
+
+      const project = await storage.getProject(finding.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Finding not found" });
+      }
+
+      await storage.updateSecurityFindingStatus(req.params.id, status);
+      res.json({ success: true, status });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update finding status" });
+    }
+  });
+
+  // ============================================
+  // Deployment Target Endpoints
+  // ============================================
+
+  // List user's deployment targets
+  app.get("/api/deployment-targets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const targets = await storage.getDeploymentTargetsByUserId(userId);
+      res.json(targets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deployment targets" });
+    }
+  });
+
+  // Create deployment target
+  app.post("/api/deployment-targets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertDeploymentTargetSchema.parse({ ...req.body, userId });
+      const target = await storage.createDeploymentTarget(data);
+      res.json(target);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create deployment target" });
+      }
+    }
+  });
+
+  // Get deployment target by ID
+  app.get("/api/deployment-targets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const target = await storage.getDeploymentTarget(req.params.id);
+      if (!target) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      if (target.userId !== userId) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      res.json(target);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deployment target" });
+    }
+  });
+
+  // Update deployment target
+  app.put("/api/deployment-targets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const target = await storage.getDeploymentTarget(req.params.id);
+      if (!target) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      if (target.userId !== userId) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      const { name, provider, region, config, isDefault } = req.body;
+      await storage.updateDeploymentTarget(req.params.id, { name, provider, region, config, isDefault });
+      const updatedTarget = await storage.getDeploymentTarget(req.params.id);
+      res.json(updatedTarget);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update deployment target" });
+    }
+  });
+
+  // Delete deployment target
+  app.delete("/api/deployment-targets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const target = await storage.getDeploymentTarget(req.params.id);
+      if (!target) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      if (target.userId !== userId) {
+        return res.status(404).json({ error: "Deployment target not found" });
+      }
+      await storage.deleteDeploymentTarget(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete deployment target" });
+    }
+  });
+
+  // ============================================
+  // Deployment Endpoints
+  // ============================================
+
+  // List deployments for a project
+  app.get("/api/projects/:id/deployments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.userId && project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const deployments = await storage.getDeploymentsByProjectId(req.params.id);
+      res.json(deployments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deployments" });
+    }
+  });
+
+  // Create deployment for a project
+  app.post("/api/projects/:id/deployments", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.userId && project.userId !== userId) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const data = insertDeploymentSchema.parse({ ...req.body, projectId: req.params.id });
+      const deployment = await storage.createDeployment(data);
+      res.json(deployment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create deployment" });
+      }
+    }
+  });
+
+  // Get deployment by ID
+  app.get("/api/deployments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const deployment = await storage.getDeployment(req.params.id);
+      if (!deployment) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const project = await storage.getProject(deployment.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      res.json(deployment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deployment" });
+    }
+  });
+
+  // Update deployment
+  app.put("/api/deployments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const deployment = await storage.getDeployment(req.params.id);
+      if (!deployment) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const project = await storage.getProject(deployment.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const { name, targetId, deploymentType, config, status, url } = req.body;
+      await storage.updateDeployment(req.params.id, { name, targetId, deploymentType, config, status, url });
+      const updatedDeployment = await storage.getDeployment(req.params.id);
+      res.json(updatedDeployment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update deployment" });
+    }
+  });
+
+  // Delete deployment
+  app.delete("/api/deployments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const deployment = await storage.getDeployment(req.params.id);
+      if (!deployment) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const project = await storage.getProject(deployment.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      await storage.deleteDeployment(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete deployment" });
+    }
+  });
+
+  // ============================================
+  // Deployment Actions Endpoints
+  // ============================================
+
+  // Trigger a deployment run
+  app.post("/api/deployments/:id/trigger", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const deployment = await storage.getDeployment(req.params.id);
+      if (!deployment) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const project = await storage.getProject(deployment.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+
+      const run = await storage.createDeploymentRun({
+        deploymentId: req.params.id,
+        status: 'pending',
+        version: `v${Date.now()}`,
+        logs: '',
+      });
+
+      executeDeployment(req.params.id, run.id).catch(console.error);
+
+      res.json(run);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to trigger deployment" });
+      }
+    }
+  });
+
+  // Get deployment run history
+  app.get("/api/deployments/:id/runs", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const deployment = await storage.getDeployment(req.params.id);
+      if (!deployment) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const project = await storage.getProject(deployment.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Deployment not found" });
+      }
+      const runs = await storage.getDeploymentRunsByDeploymentId(req.params.id);
+      res.json(runs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deployment runs" });
+    }
+  });
+
+  // Get specific deployment run with logs
+  app.get("/api/deployment-runs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const run = await storage.getDeploymentRun(req.params.id);
+      if (!run) {
+        return res.status(404).json({ error: "Deployment run not found" });
+      }
+      const deployment = await storage.getDeployment(run.deploymentId);
+      if (!deployment) {
+        return res.status(404).json({ error: "Deployment run not found" });
+      }
+      const project = await storage.getProject(deployment.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Deployment run not found" });
+      }
+      res.json(run);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch deployment run" });
+    }
+  });
+
   return httpServer;
+}
+
+// Deployment Execution Logic
+async function executeDeployment(deploymentId: string, runId: string) {
+  const appendLog = async (message: string) => {
+    const run = await storage.getDeploymentRun(runId);
+    const currentLogs = run?.logs || '';
+    const timestamp = new Date().toISOString();
+    await storage.updateDeploymentRun(runId, {
+      logs: currentLogs + `[${timestamp}] ${message}\n`
+    });
+  };
+
+  try {
+    await storage.updateDeploymentRun(runId, { status: 'running' });
+    await storage.updateDeployment(deploymentId, { status: 'deploying' });
+
+    await appendLog('Initializing deployment environment...');
+    await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
+
+    await appendLog('Pulling infrastructure configuration...');
+    await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400));
+
+    const resourceCount = Math.floor(Math.random() * 5) + 2;
+    await appendLog(`Applying Terraform changes... (${resourceCount} resources added)`);
+    await new Promise(resolve => setTimeout(resolve, 1000 + Math.random() * 500));
+
+    await appendLog('Building Docker image...');
+    await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
+
+    await appendLog('Pushing to container registry...');
+    await new Promise(resolve => setTimeout(resolve, 700 + Math.random() * 300));
+
+    await appendLog('Updating Kubernetes deployment...');
+    await new Promise(resolve => setTimeout(resolve, 600 + Math.random() * 400));
+
+    await appendLog('Waiting for pods to be ready...');
+    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 300));
+
+    await appendLog('Health checks passing...');
+    await new Promise(resolve => setTimeout(resolve, 400 + Math.random() * 200));
+
+    const isSuccess = Math.random() > 0.1;
+
+    if (isSuccess) {
+      const deployment = await storage.getDeployment(deploymentId);
+      const deploymentName = deployment?.name?.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase() || 'app';
+      const randomId = Math.random().toString(36).substring(2, 8);
+      const deploymentUrl = `https://${deploymentName}-${randomId}.deploy.example.com`;
+
+      await appendLog('Deployment complete!');
+      await appendLog(`Application available at: ${deploymentUrl}`);
+
+      await storage.updateDeploymentRun(runId, {
+        status: 'success',
+        completedAt: new Date()
+      });
+      await storage.updateDeployment(deploymentId, {
+        status: 'deployed',
+        url: deploymentUrl
+      });
+    } else {
+      const errorMessages = [
+        'Container health check failed after 3 attempts',
+        'Failed to pull image: authentication required',
+        'Pod crashed with exit code 1',
+        'Resource quota exceeded in namespace'
+      ];
+      const errorMessage = errorMessages[Math.floor(Math.random() * errorMessages.length)];
+
+      await appendLog(`ERROR: ${errorMessage}`);
+      await appendLog('Deployment failed. Rolling back...');
+
+      await storage.updateDeploymentRun(runId, {
+        status: 'failed',
+        errorMessage,
+        completedAt: new Date()
+      });
+      await storage.updateDeployment(deploymentId, { status: 'failed' });
+    }
+
+  } catch (error) {
+    console.error('Deployment execution failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    await appendLog(`FATAL: ${errorMessage}`);
+
+    await storage.updateDeploymentRun(runId, {
+      status: 'failed',
+      errorMessage,
+      completedAt: new Date()
+    });
+    await storage.updateDeployment(deploymentId, { status: 'failed' });
+  }
 }
 
 // AI Infrastructure Generation Logic
@@ -918,5 +1745,190 @@ spec:
     console.error('Infrastructure generation from upload failed:', error);
     await logStep('error', `Generation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     await storage.updateProjectStatus(projectId, 'failed');
+  }
+}
+
+async function runSecurityScan(scanId: string, projectId: string) {
+  try {
+    await new Promise(resolve => setTimeout(resolve, 2000 + Math.random() * 1000));
+
+    const template = await storage.getInfrastructureTemplateByProjectId(projectId);
+    const detectedLanguage = template?.detectedLanguage || 'unknown';
+
+    interface FindingTemplate {
+      title: string;
+      description: string;
+      severity: string;
+      category: string;
+      filePath: string;
+      lineNumber: number;
+      recommendation: string;
+    }
+
+    let findings: FindingTemplate[] = [];
+
+    if (detectedLanguage === 'javascript' || detectedLanguage === 'typescript') {
+      findings = [
+        {
+          title: 'Potential XSS vulnerability',
+          description: 'User input is rendered directly in the DOM without sanitization, potentially allowing cross-site scripting attacks.',
+          severity: 'high',
+          category: 'injection',
+          filePath: 'src/components/UserInput.tsx',
+          lineNumber: 42,
+          recommendation: 'Use DOMPurify or similar library to sanitize user input before rendering.'
+        },
+        {
+          title: 'Unsanitized user input',
+          description: 'User-provided data is passed directly to database queries without proper validation or escaping.',
+          severity: 'critical',
+          category: 'injection',
+          filePath: 'src/api/users.ts',
+          lineNumber: 78,
+          recommendation: 'Use parameterized queries and input validation.'
+        },
+        {
+          title: 'Outdated dependency',
+          description: 'Package lodash@4.17.15 has known security vulnerabilities. A newer patched version is available.',
+          severity: 'medium',
+          category: 'dependency',
+          filePath: 'package.json',
+          lineNumber: 15,
+          recommendation: 'Update lodash to version 4.17.21 or later.'
+        }
+      ];
+    } else if (detectedLanguage === 'python') {
+      findings = [
+        {
+          title: 'SQL injection risk',
+          description: 'String formatting is used to construct SQL queries, making the application vulnerable to SQL injection attacks.',
+          severity: 'critical',
+          category: 'injection',
+          filePath: 'app/database.py',
+          lineNumber: 56,
+          recommendation: 'Use parameterized queries with SQLAlchemy or prepared statements.'
+        },
+        {
+          title: 'Hardcoded secrets',
+          description: 'API keys and secrets are hardcoded in the source code, exposing them to version control and potential leakage.',
+          severity: 'high',
+          category: 'secrets',
+          filePath: 'config/settings.py',
+          lineNumber: 23,
+          recommendation: 'Move secrets to environment variables or a secure secrets manager.'
+        },
+        {
+          title: 'Insecure pickle usage',
+          description: 'Pickle is used to deserialize untrusted data, which can lead to arbitrary code execution.',
+          severity: 'high',
+          category: 'injection',
+          filePath: 'utils/cache.py',
+          lineNumber: 89,
+          recommendation: 'Use JSON or other safe serialization formats for untrusted data.'
+        }
+      ];
+    } else if (detectedLanguage === 'go') {
+      findings = [
+        {
+          title: 'Race condition detected',
+          description: 'Concurrent access to shared variable without proper synchronization detected.',
+          severity: 'high',
+          category: 'config',
+          filePath: 'internal/handlers/user.go',
+          lineNumber: 112,
+          recommendation: 'Use mutex locks or atomic operations for shared state access.'
+        },
+        {
+          title: 'Unchecked error return',
+          description: 'Error return value from function call is not checked, potentially masking failures.',
+          severity: 'medium',
+          category: 'config',
+          filePath: 'internal/db/connection.go',
+          lineNumber: 45,
+          recommendation: 'Always check and handle error return values appropriately.'
+        }
+      ];
+    } else {
+      findings = [
+        {
+          title: 'Insufficient logging',
+          description: 'Critical operations lack proper audit logging, making incident investigation difficult.',
+          severity: 'low',
+          category: 'config',
+          filePath: 'src/main',
+          lineNumber: 1,
+          recommendation: 'Implement comprehensive logging for authentication, data access, and administrative actions.'
+        },
+        {
+          title: 'Missing rate limiting',
+          description: 'API endpoints lack rate limiting, making them vulnerable to brute force and denial of service attacks.',
+          severity: 'medium',
+          category: 'config',
+          filePath: 'src/routes',
+          lineNumber: 1,
+          recommendation: 'Implement rate limiting using middleware like express-rate-limit or similar.'
+        },
+        {
+          title: 'No input validation',
+          description: 'User input is not validated against expected formats and constraints.',
+          severity: 'high',
+          category: 'injection',
+          filePath: 'src/handlers',
+          lineNumber: 1,
+          recommendation: 'Implement input validation using a schema validation library like Zod or Joi.'
+        }
+      ];
+    }
+
+    let criticalCount = 0;
+    let highCount = 0;
+    let mediumCount = 0;
+    let lowCount = 0;
+
+    for (const finding of findings) {
+      await storage.createSecurityFinding({
+        projectId,
+        severity: finding.severity,
+        category: finding.category,
+        title: finding.title,
+        description: finding.description,
+        filePath: finding.filePath,
+        lineNumber: finding.lineNumber,
+        recommendation: finding.recommendation,
+        status: 'open',
+      });
+
+      switch (finding.severity) {
+        case 'critical':
+          criticalCount++;
+          break;
+        case 'high':
+          highCount++;
+          break;
+        case 'medium':
+          mediumCount++;
+          break;
+        case 'low':
+          lowCount++;
+          break;
+      }
+    }
+
+    await storage.updateSecurityScan(scanId, {
+      status: 'completed',
+      totalFindings: findings.length,
+      criticalCount,
+      highCount,
+      mediumCount,
+      lowCount,
+      completedAt: new Date(),
+    });
+
+  } catch (error) {
+    console.error('Security scan failed:', error);
+    await storage.updateSecurityScan(scanId, {
+      status: 'failed',
+      completedAt: new Date(),
+    });
   }
 }
