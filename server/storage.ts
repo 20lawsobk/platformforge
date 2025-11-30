@@ -5,19 +5,28 @@ import {
   type InsertInfrastructureTemplate,
   type BuildLog,
   type InsertBuildLog,
+  type User,
+  type UpsertUser,
   projects,
   infrastructureTemplates,
-  buildLogs
+  buildLogs,
+  users
 } from "@shared/schema";
 import { db } from "../db";
 import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
+  // User operations (IMPORTANT: mandatory for Replit Auth)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  updateUserOnboarding(id: string, completed: boolean): Promise<void>;
+  
   // Projects
   createProject(project: InsertProject): Promise<Project>;
   getProject(id: string): Promise<Project | undefined>;
   updateProjectStatus(id: string, status: string, completedAt?: Date): Promise<void>;
   getAllProjects(): Promise<Project[]>;
+  getProjectsByUserId(userId: string): Promise<Project[]>;
   
   // Infrastructure Templates
   createInfrastructureTemplate(template: InsertInfrastructureTemplate): Promise<InfrastructureTemplate>;
@@ -29,6 +38,33 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  // User operations (IMPORTANT: mandatory for Replit Auth)
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
+  async updateUserOnboarding(id: string, completed: boolean): Promise<void> {
+    await db.update(users)
+      .set({ onboardingCompleted: completed, updatedAt: new Date() })
+      .where(eq(users.id, id));
+  }
+
   // Projects
   async createProject(insertProject: InsertProject): Promise<Project> {
     const [project] = await db.insert(projects).values(insertProject).returning();
@@ -48,6 +84,13 @@ export class DatabaseStorage implements IStorage {
 
   async getAllProjects(): Promise<Project[]> {
     return await db.select().from(projects).orderBy(desc(projects.createdAt));
+  }
+
+  async getProjectsByUserId(userId: string): Promise<Project[]> {
+    return await db.select()
+      .from(projects)
+      .where(eq(projects.userId, userId))
+      .orderBy(desc(projects.createdAt));
   }
 
   // Infrastructure Templates

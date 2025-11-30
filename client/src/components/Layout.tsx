@@ -33,14 +33,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link href="/features" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-features">Features</Link>
             <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-docs">Docs</Link>
             <div className="h-4 w-px bg-border/50 mx-2" />
-            <Link href="/login">
+            <a href="/api/login">
               <Button variant="ghost" className="font-mono text-xs" data-testid="button-nav-login">Login</Button>
-            </Link>
-            <Link href="/">
+            </a>
+            <a href="/api/login">
               <Button variant="default" className="font-mono text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90" data-testid="button-nav-start">
                 Start Building
               </Button>
-            </Link>
+            </a>
           </div>
 
           {/* Mobile Nav */}
@@ -56,10 +56,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <Link href="/compare" className="text-lg font-medium" data-testid="link-mobile-compare">Compare</Link>
                   <Link href="/features" className="text-lg font-medium" data-testid="link-mobile-features">Features</Link>
                   <Link href="/docs" className="text-lg font-medium" data-testid="link-mobile-docs">Docs</Link>
-                  <Link href="/login" className="text-lg font-medium" data-testid="link-mobile-login">Login</Link>
-                  <Link href="/">
+                  <a href="/api/login" className="text-lg font-medium" data-testid="link-mobile-login">Login</a>
+                  <a href="/api/login">
                     <Button className="w-full mt-4" data-testid="button-mobile-start">Start Building</Button>
-                  </Link>
+                  </a>
                 </div>
               </SheetContent>
             </Sheet>

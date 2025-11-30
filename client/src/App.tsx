@@ -3,14 +3,14 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Builder from "@/pages/Builder";
 import Compare from "@/pages/Compare";
 import Features from "@/pages/Features";
 import Docs from "@/pages/Docs";
-import Login from "@/pages/Login";
-import Register from "@/pages/Register";
+import Onboarding from "@/pages/Onboarding";
 import Overview from "@/pages/dashboard/Overview";
 import DashboardDeployments from "@/pages/dashboard/Deployments";
 import Settings from "@/pages/dashboard/Settings";
@@ -25,15 +25,15 @@ import Blog from "@/pages/Blog";
 import Careers from "@/pages/Careers";
 
 function Router() {
+  const { user, isLoading, isAuthenticated } = useAuth();
+
   return (
     <Switch>
+      {/* Public pages */}
       <Route path="/" component={Home} />
-      <Route path="/builder" component={Builder} />
       <Route path="/compare" component={Compare} />
       <Route path="/features" component={Features} />
       <Route path="/docs" component={Docs} />
-      <Route path="/login" component={Login} />
-      <Route path="/register" component={Register} />
       
       {/* Platform Pages */}
       <Route path="/deployments" component={DeploymentsPage} />
@@ -49,11 +49,29 @@ function Router() {
       <Route path="/blog" component={Blog} />
       <Route path="/careers" component={Careers} />
       
-      {/* Dashboard Routes */}
-      <Route path="/dashboard" component={Overview} />
-      <Route path="/dashboard/deployments" component={DashboardDeployments} />
-      <Route path="/dashboard/settings" component={Settings} />
-      <Route path="/dashboard/logs" component={Logs} />
+      {/* Auth-protected routes */}
+      <Route path="/onboarding">
+        {isAuthenticated ? <Onboarding /> : <Home />}
+      </Route>
+      <Route path="/builder">
+        {isAuthenticated ? <Builder /> : <Home />}
+      </Route>
+      
+      {/* Dashboard Routes - protected */}
+      <Route path="/dashboard">
+        {isAuthenticated ? (
+          user?.onboardingCompleted ? <Overview /> : <Onboarding />
+        ) : <Home />}
+      </Route>
+      <Route path="/dashboard/deployments">
+        {isAuthenticated ? <DashboardDeployments /> : <Home />}
+      </Route>
+      <Route path="/dashboard/settings">
+        {isAuthenticated ? <Settings /> : <Home />}
+      </Route>
+      <Route path="/dashboard/logs">
+        {isAuthenticated ? <Logs /> : <Home />}
+      </Route>
       
       <Route component={NotFound} />
     </Switch>

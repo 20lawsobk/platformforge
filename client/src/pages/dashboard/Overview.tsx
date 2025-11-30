@@ -54,12 +54,7 @@ const metricsData = [
 
 export default function Overview() {
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: ['projects'],
-    queryFn: async () => {
-      const res = await fetch('/api/projects');
-      if (!res.ok) throw new Error('Failed to fetch projects');
-      return res.json();
-    },
+    queryKey: ['/api/user/projects'],
   });
 
   const getStatusColor = (status: string) => {

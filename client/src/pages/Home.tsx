@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/useAuth";
 import Layout from "@/components/Layout";
 import bgImage from "@assets/generated_images/cybernetic_schematic_background.png";
 
@@ -34,6 +35,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const { isAuthenticated } = useAuth();
 
   const createProject = useMutation({
     mutationFn: async (sourceUrl: string) => {
@@ -94,6 +96,10 @@ export default function Home() {
 
   const handleIgniteGithub = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthenticated) {
+      window.location.href = '/api/login';
+      return;
+    }
     if (input.trim()) {
       createProject.mutate(input);
     }
@@ -101,6 +107,10 @@ export default function Home() {
 
   const handleIgniteUpload = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAuthenticated) {
+      window.location.href = '/api/login';
+      return;
+    }
     if (files.length === 0) {
       toast({
         title: "No files selected",

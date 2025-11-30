@@ -4,9 +4,9 @@ import { storage } from "./storage";
 import { z } from "zod";
 import { insertProjectSchema, insertBuildLogSchema } from "@shared/schema";
 import { aiModelClient, fallbackResponses } from "./ai/model-client";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
 
 interface UploadedFile {
   filename: string;
@@ -33,10 +33,51 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Create a new project and start infrastructure generation
-  app.post("/api/projects", async (req, res) => {
+  // Setup authentication
+  await setupAuth(app);
+  
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const data = insertProjectSchema.parse(req.body);
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Complete onboarding
+  app.post('/api/auth/onboarding', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      await storage.updateUserOnboarding(userId, true);
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error completing onboarding:", error);
+      res.status(500).json({ message: "Failed to complete onboarding" });
+    }
+  });
+
+  // Get user's projects
+  app.get('/api/user/projects', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const projects = await storage.getProjectsByUserId(userId);
+      res.json(projects);
+    } catch (error) {
+      console.error("Error fetching user projects:", error);
+      res.status(500).json({ message: "Failed to fetch projects" });
+    }
+  });
+
+  // Create a new project (authenticated)
+  app.post("/api/projects", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertProjectSchema.parse({ ...req.body, userId });
       const project = await storage.createProject(data);
       
       // Start async infrastructure generation process
@@ -52,11 +93,15 @@ export async function registerRoutes(
     }
   });
 
-  // Get project by ID
-  app.get("/api/projects/:id", async (req, res) => {
+  // Get project by ID (authenticated - owner only)
+  app.get("/api/projects/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const project = await storage.getProject(req.params.id);
       if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      if (project.userId && project.userId !== userId) {
         return res.status(404).json({ error: "Project not found" });
       }
       res.json(project);
@@ -65,19 +110,25 @@ export async function registerRoutes(
     }
   });
 
-  // Get all projects
-  app.get("/api/projects", async (req, res) => {
+  // Get all projects (authenticated - user's projects only)
+  app.get("/api/projects", isAuthenticated, async (req: any, res) => {
     try {
-      const projects = await storage.getAllProjects();
+      const userId = req.user.claims.sub;
+      const projects = await storage.getProjectsByUserId(userId);
       res.json(projects);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch projects" });
     }
   });
 
-  // Get infrastructure template for a project
-  app.get("/api/projects/:id/infrastructure", async (req, res) => {
+  // Get infrastructure template for a project (authenticated - owner only)
+  app.get("/api/projects/:id/infrastructure", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       const template = await storage.getInfrastructureTemplateByProjectId(req.params.id);
       if (!template) {
         return res.status(404).json({ error: "Infrastructure template not found" });
@@ -88,9 +139,14 @@ export async function registerRoutes(
     }
   });
 
-  // Get build logs for a project
-  app.get("/api/projects/:id/logs", async (req, res) => {
+  // Get build logs for a project (authenticated - owner only)
+  app.get("/api/projects/:id/logs", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.id);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
       const logs = await storage.getBuildLogsByProjectId(req.params.id);
       res.json(logs);
     } catch (error) {
@@ -98,16 +154,17 @@ export async function registerRoutes(
     }
   });
 
-  // Upload files and create project
-  app.post("/api/projects/upload", upload.array('files', 50), async (req, res) => {
+  // Upload files and create project (authenticated)
+  app.post("/api/projects/upload", isAuthenticated, upload.array('files', 50), async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const files = req.files as Express.Multer.File[];
       
       if (!files || files.length === 0) {
         return res.status(400).json({ error: "No files uploaded" });
       }
 
-      const projectName = req.body.projectName || 
+      const projectName = req.body.projectName || req.body.name ||
         path.basename(files[0].originalname, path.extname(files[0].originalname)) ||
         'uploaded-project';
 
@@ -121,7 +178,8 @@ export async function registerRoutes(
         name: projectName,
         sourceUrl: `upload://${projectName}`,
         sourceType: 'upload',
-        status: 'pending'
+        status: 'pending',
+        userId,
       });
 
       generateInfrastructureFromUpload(project.id, projectName, uploadedFiles).catch(console.error);
