@@ -70,6 +70,120 @@ export const buildLogs = pgTable("build_logs", {
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
 
+// KV Store Namespaces
+export const kvNamespaces = pgTable("kv_namespaces", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// KV Store Entries
+export const kvEntries = pgTable("kv_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  namespaceId: varchar("namespace_id").references(() => kvNamespaces.id).notNull(),
+  key: varchar("key").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Object Storage Buckets
+export const objectBuckets = pgTable("object_buckets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  name: varchar("name").notNull(),
+  description: text("description"),
+  isPublic: boolean("is_public").default(false),
+  totalSize: integer("total_size").default(0),
+  objectCount: integer("object_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Object Storage Objects
+export const storageObjects = pgTable("storage_objects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  bucketId: varchar("bucket_id").references(() => objectBuckets.id).notNull(),
+  key: varchar("key").notNull(),
+  contentType: varchar("content_type"),
+  size: integer("size").default(0),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Security Findings
+export const securityFindings = pgTable("security_findings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id).notNull(),
+  severity: varchar("severity").notNull(),
+  category: varchar("category").notNull(),
+  title: varchar("title").notNull(),
+  description: text("description").notNull(),
+  filePath: varchar("file_path"),
+  lineNumber: integer("line_number"),
+  recommendation: text("recommendation"),
+  status: varchar("status").default("open"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Security Scans
+export const securityScans = pgTable("security_scans", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id).notNull(),
+  status: varchar("status").notNull().default("pending"),
+  totalFindings: integer("total_findings").default(0),
+  criticalCount: integer("critical_count").default(0),
+  highCount: integer("high_count").default(0),
+  mediumCount: integer("medium_count").default(0),
+  lowCount: integer("low_count").default(0),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Deployment Targets (cloud provider configs)
+export const deploymentTargets = pgTable("deployment_targets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  name: varchar("name").notNull(),
+  provider: varchar("provider").notNull(),
+  region: varchar("region"),
+  config: jsonb("config"),
+  isDefault: boolean("is_default").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Deployments
+export const deployments = pgTable("deployments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id).notNull(),
+  targetId: varchar("target_id").references(() => deploymentTargets.id),
+  name: varchar("name").notNull(),
+  status: varchar("status").notNull().default("pending"),
+  deploymentType: varchar("deployment_type").notNull(),
+  url: varchar("url"),
+  config: jsonb("config"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Deployment Runs (history)
+export const deploymentRuns = pgTable("deployment_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  deploymentId: varchar("deployment_id").references(() => deployments.id).notNull(),
+  status: varchar("status").notNull().default("pending"),
+  version: varchar("version"),
+  logs: text("logs"),
+  errorMessage: text("error_message"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
 // Insert Schemas
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
@@ -87,6 +201,61 @@ export const insertBuildLogSchema = createInsertSchema(buildLogs).omit({
   timestamp: true,
 });
 
+export const insertKvNamespaceSchema = createInsertSchema(kvNamespaces).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertKvEntrySchema = createInsertSchema(kvEntries).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertObjectBucketSchema = createInsertSchema(objectBuckets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  totalSize: true,
+  objectCount: true,
+});
+
+export const insertStorageObjectSchema = createInsertSchema(storageObjects).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertSecurityFindingSchema = createInsertSchema(securityFindings).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertSecurityScanSchema = createInsertSchema(securityScans).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+});
+
+export const insertDeploymentTargetSchema = createInsertSchema(deploymentTargets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDeploymentSchema = createInsertSchema(deployments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertDeploymentRunSchema = createInsertSchema(deploymentRuns).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+});
+
 // Types
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
@@ -96,3 +265,30 @@ export type InfrastructureTemplate = typeof infrastructureTemplates.$inferSelect
 
 export type InsertBuildLog = z.infer<typeof insertBuildLogSchema>;
 export type BuildLog = typeof buildLogs.$inferSelect;
+
+export type InsertKvNamespace = z.infer<typeof insertKvNamespaceSchema>;
+export type KvNamespace = typeof kvNamespaces.$inferSelect;
+
+export type InsertKvEntry = z.infer<typeof insertKvEntrySchema>;
+export type KvEntry = typeof kvEntries.$inferSelect;
+
+export type InsertObjectBucket = z.infer<typeof insertObjectBucketSchema>;
+export type ObjectBucket = typeof objectBuckets.$inferSelect;
+
+export type InsertStorageObject = z.infer<typeof insertStorageObjectSchema>;
+export type StorageObject = typeof storageObjects.$inferSelect;
+
+export type InsertSecurityFinding = z.infer<typeof insertSecurityFindingSchema>;
+export type SecurityFinding = typeof securityFindings.$inferSelect;
+
+export type InsertSecurityScan = z.infer<typeof insertSecurityScanSchema>;
+export type SecurityScan = typeof securityScans.$inferSelect;
+
+export type InsertDeploymentTarget = z.infer<typeof insertDeploymentTargetSchema>;
+export type DeploymentTarget = typeof deploymentTargets.$inferSelect;
+
+export type InsertDeployment = z.infer<typeof insertDeploymentSchema>;
+export type Deployment = typeof deployments.$inferSelect;
+
+export type InsertDeploymentRun = z.infer<typeof insertDeploymentRunSchema>;
+export type DeploymentRun = typeof deploymentRuns.$inferSelect;
