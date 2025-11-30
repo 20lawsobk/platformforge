@@ -25,6 +25,12 @@ import {
   type InsertDeployment,
   type DeploymentRun,
   type InsertDeploymentRun,
+  type EnvVariable,
+  type InsertEnvVariable,
+  type ProjectFile,
+  type InsertProjectFile,
+  type ConsoleLog,
+  type InsertConsoleLog,
   projects,
   infrastructureTemplates,
   buildLogs,
@@ -37,7 +43,10 @@ import {
   securityScans,
   deploymentTargets,
   deployments,
-  deploymentRuns
+  deploymentRuns,
+  envVariables,
+  projectFiles,
+  consoleLogs
 } from "@shared/schema";
 import { db } from "../db";
 import { eq, desc, and } from "drizzle-orm";
@@ -110,6 +119,26 @@ export interface IStorage {
   getDeploymentRun(id: string): Promise<DeploymentRun | undefined>;
   getDeploymentRunsByDeploymentId(deploymentId: string): Promise<DeploymentRun[]>;
   updateDeploymentRun(id: string, updates: Partial<DeploymentRun>): Promise<void>;
+
+  // Environment Variables Operations
+  getEnvVariablesByUser(userId: string): Promise<EnvVariable[]>;
+  getEnvVariablesByProject(projectId: string): Promise<EnvVariable[]>;
+  createEnvVariable(data: InsertEnvVariable): Promise<EnvVariable>;
+  updateEnvVariable(id: string, data: Partial<InsertEnvVariable>): Promise<EnvVariable | undefined>;
+  deleteEnvVariable(id: string): Promise<void>;
+
+  // Project Files Operations
+  getProjectFiles(projectId: string): Promise<ProjectFile[]>;
+  getProjectFile(id: string): Promise<ProjectFile | undefined>;
+  getProjectFileByPath(projectId: string, path: string): Promise<ProjectFile | undefined>;
+  createProjectFile(data: InsertProjectFile): Promise<ProjectFile>;
+  updateProjectFile(id: string, data: Partial<InsertProjectFile>): Promise<ProjectFile | undefined>;
+  deleteProjectFile(id: string): Promise<void>;
+
+  // Console Logs Operations
+  getConsoleLogs(projectId: string, limit?: number): Promise<ConsoleLog[]>;
+  createConsoleLog(data: InsertConsoleLog): Promise<ConsoleLog>;
+  clearConsoleLogs(projectId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -447,6 +476,97 @@ export class DatabaseStorage implements IStorage {
     await db.update(deploymentRuns)
       .set(updates)
       .where(eq(deploymentRuns.id, id));
+  }
+
+  // Environment Variables Operations
+  async getEnvVariablesByUser(userId: string): Promise<EnvVariable[]> {
+    return await db.select()
+      .from(envVariables)
+      .where(eq(envVariables.userId, userId))
+      .orderBy(desc(envVariables.createdAt));
+  }
+
+  async getEnvVariablesByProject(projectId: string): Promise<EnvVariable[]> {
+    return await db.select()
+      .from(envVariables)
+      .where(eq(envVariables.projectId, projectId))
+      .orderBy(desc(envVariables.createdAt));
+  }
+
+  async createEnvVariable(data: InsertEnvVariable): Promise<EnvVariable> {
+    const [envVar] = await db.insert(envVariables).values(data).returning();
+    return envVar;
+  }
+
+  async updateEnvVariable(id: string, data: Partial<InsertEnvVariable>): Promise<EnvVariable | undefined> {
+    const [updated] = await db.update(envVariables)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(envVariables.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEnvVariable(id: string): Promise<void> {
+    await db.delete(envVariables).where(eq(envVariables.id, id));
+  }
+
+  // Project Files Operations
+  async getProjectFiles(projectId: string): Promise<ProjectFile[]> {
+    return await db.select()
+      .from(projectFiles)
+      .where(eq(projectFiles.projectId, projectId))
+      .orderBy(projectFiles.path);
+  }
+
+  async getProjectFile(id: string): Promise<ProjectFile | undefined> {
+    const [file] = await db.select().from(projectFiles).where(eq(projectFiles.id, id));
+    return file;
+  }
+
+  async getProjectFileByPath(projectId: string, path: string): Promise<ProjectFile | undefined> {
+    const [file] = await db.select()
+      .from(projectFiles)
+      .where(and(eq(projectFiles.projectId, projectId), eq(projectFiles.path, path)));
+    return file;
+  }
+
+  async createProjectFile(data: InsertProjectFile): Promise<ProjectFile> {
+    const [file] = await db.insert(projectFiles).values(data).returning();
+    return file;
+  }
+
+  async updateProjectFile(id: string, data: Partial<InsertProjectFile>): Promise<ProjectFile | undefined> {
+    const [updated] = await db.update(projectFiles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(projectFiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteProjectFile(id: string): Promise<void> {
+    await db.delete(projectFiles).where(eq(projectFiles.id, id));
+  }
+
+  // Console Logs Operations
+  async getConsoleLogs(projectId: string, limit?: number): Promise<ConsoleLog[]> {
+    const query = db.select()
+      .from(consoleLogs)
+      .where(eq(consoleLogs.projectId, projectId))
+      .orderBy(desc(consoleLogs.timestamp));
+    
+    if (limit) {
+      return await query.limit(limit);
+    }
+    return await query;
+  }
+
+  async createConsoleLog(data: InsertConsoleLog): Promise<ConsoleLog> {
+    const [log] = await db.insert(consoleLogs).values(data).returning();
+    return log;
+  }
+
+  async clearConsoleLogs(projectId: string): Promise<void> {
+    await db.delete(consoleLogs).where(eq(consoleLogs.projectId, projectId));
   }
 }
 

@@ -13,7 +13,10 @@ import {
   insertSecurityFindingSchema,
   insertDeploymentTargetSchema,
   insertDeploymentSchema,
-  insertDeploymentRunSchema
+  insertDeploymentRunSchema,
+  insertEnvVariableSchema,
+  insertProjectFileSchema,
+  insertConsoleLogSchema
 } from "@shared/schema";
 import { aiModelClient, fallbackResponses } from "./ai/model-client";
 import { setupAuth, isAuthenticated } from "./replitAuth";
@@ -1126,6 +1129,336 @@ export async function registerRoutes(
       res.json(run);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch deployment run" });
+    }
+  });
+
+  // ============================================
+  // Environment Variables Endpoints
+  // ============================================
+
+  // List user's environment variables (non-secret only)
+  app.get("/api/env", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const envVars = await storage.getEnvVariablesByUser(userId);
+      const nonSecretVars = envVars.filter(v => !v.isSecret);
+      res.json(nonSecretVars);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch environment variables" });
+    }
+  });
+
+  // Create environment variable
+  app.post("/api/env", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertEnvVariableSchema.parse({ ...req.body, userId, isSecret: false });
+      const envVar = await storage.createEnvVariable(data);
+      res.json(envVar);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create environment variable" });
+      }
+    }
+  });
+
+  // Update environment variable
+  app.put("/api/env/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const envVars = await storage.getEnvVariablesByUser(userId);
+      const envVar = envVars.find(v => v.id === req.params.id && !v.isSecret);
+      if (!envVar) {
+        return res.status(404).json({ error: "Environment variable not found" });
+      }
+      const { key, value, environment, projectId } = req.body;
+      const updated = await storage.updateEnvVariable(req.params.id, { key, value, environment, projectId });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update environment variable" });
+    }
+  });
+
+  // Delete environment variable
+  app.delete("/api/env/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const envVars = await storage.getEnvVariablesByUser(userId);
+      const envVar = envVars.find(v => v.id === req.params.id && !v.isSecret);
+      if (!envVar) {
+        return res.status(404).json({ error: "Environment variable not found" });
+      }
+      await storage.deleteEnvVariable(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete environment variable" });
+    }
+  });
+
+  // ============================================
+  // Secrets Endpoints (env vars with isSecret: true)
+  // ============================================
+
+  // List user's secrets (masked values)
+  app.get("/api/secrets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const envVars = await storage.getEnvVariablesByUser(userId);
+      const secrets = envVars
+        .filter(v => v.isSecret)
+        .map(({ id, key, environment }) => ({ id, key, environment }));
+      res.json(secrets);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch secrets" });
+    }
+  });
+
+  // Create secret
+  app.post("/api/secrets", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const data = insertEnvVariableSchema.parse({ ...req.body, userId, isSecret: true });
+      const secret = await storage.createEnvVariable(data);
+      res.json({ id: secret.id, key: secret.key, environment: secret.environment });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create secret" });
+      }
+    }
+  });
+
+  // Update secret value only
+  app.put("/api/secrets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const envVars = await storage.getEnvVariablesByUser(userId);
+      const secret = envVars.find(v => v.id === req.params.id && v.isSecret);
+      if (!secret) {
+        return res.status(404).json({ error: "Secret not found" });
+      }
+      const { value } = req.body;
+      if (!value || typeof value !== 'string') {
+        return res.status(400).json({ error: "Value is required" });
+      }
+      await storage.updateEnvVariable(req.params.id, { value });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update secret" });
+    }
+  });
+
+  // Delete secret
+  app.delete("/api/secrets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const envVars = await storage.getEnvVariablesByUser(userId);
+      const secret = envVars.find(v => v.id === req.params.id && v.isSecret);
+      if (!secret) {
+        return res.status(404).json({ error: "Secret not found" });
+      }
+      await storage.deleteEnvVariable(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete secret" });
+    }
+  });
+
+  // ============================================
+  // Project Files Endpoints
+  // ============================================
+
+  // List project files
+  app.get("/api/projects/:projectId/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const files = await storage.getProjectFiles(req.params.projectId);
+      res.json(files);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch project files" });
+    }
+  });
+
+  // Get file content
+  app.get("/api/projects/:projectId/files/:fileId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const file = await storage.getProjectFile(req.params.fileId);
+      if (!file || file.projectId !== req.params.projectId) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      res.json(file);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch file" });
+    }
+  });
+
+  // Create file
+  app.post("/api/projects/:projectId/files", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const data = insertProjectFileSchema.parse({ ...req.body, projectId: req.params.projectId });
+      const file = await storage.createProjectFile(data);
+      res.json(file);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create file" });
+      }
+    }
+  });
+
+  // Update file
+  app.put("/api/projects/:projectId/files/:fileId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const file = await storage.getProjectFile(req.params.fileId);
+      if (!file || file.projectId !== req.params.projectId) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      const { name, content, path: filePath, parentPath } = req.body;
+      const updated = await storage.updateProjectFile(req.params.fileId, { name, content, path: filePath, parentPath });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update file" });
+    }
+  });
+
+  // Delete file
+  app.delete("/api/projects/:projectId/files/:fileId", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const file = await storage.getProjectFile(req.params.fileId);
+      if (!file || file.projectId !== req.params.projectId) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      await storage.deleteProjectFile(req.params.fileId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete file" });
+    }
+  });
+
+  // ============================================
+  // Console Logs Endpoints
+  // ============================================
+
+  // Get console logs (last 100)
+  app.get("/api/projects/:projectId/console", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const logs = await storage.getConsoleLogs(req.params.projectId, 100);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch console logs" });
+    }
+  });
+
+  // Add console log entry
+  app.post("/api/projects/:projectId/console", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const data = insertConsoleLogSchema.parse({ ...req.body, projectId: req.params.projectId });
+      const log = await storage.createConsoleLog(data);
+      res.json(log);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        res.status(400).json({ error: error.errors });
+      } else {
+        res.status(500).json({ error: "Failed to create console log" });
+      }
+    }
+  });
+
+  // Clear console logs
+  app.delete("/api/projects/:projectId/console", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      await storage.clearConsoleLogs(req.params.projectId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to clear console logs" });
+    }
+  });
+
+  // ============================================
+  // Project Run Endpoint (simulated)
+  // ============================================
+
+  // Run project (simulated)
+  app.post("/api/projects/:projectId/run", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const project = await storage.getProject(req.params.projectId);
+      if (!project || (project.userId && project.userId !== userId)) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+
+      const logs: { type: string; message: string; timestamp: Date }[] = [];
+
+      const addLog = async (type: string, message: string) => {
+        const log = await storage.createConsoleLog({
+          projectId: req.params.projectId,
+          type,
+          message
+        });
+        logs.push({ type: log.type, message: log.message, timestamp: log.timestamp });
+      };
+
+      await addLog('info', 'Starting build process...');
+      await addLog('info', 'Installing dependencies...');
+      await addLog('log', '> npm install');
+      await addLog('log', 'added 127 packages in 3.2s');
+      await addLog('info', 'Compiling source files...');
+      await addLog('log', '> tsc --build');
+      await addLog('success', 'Build completed successfully');
+      await addLog('info', 'Starting application...');
+      await addLog('log', '> node dist/index.js');
+      await addLog('success', 'Application running on port 3000');
+
+      res.json({ 
+        success: true, 
+        message: 'Project started successfully',
+        logs 
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to run project" });
     }
   });
 

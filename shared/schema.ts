@@ -184,6 +184,41 @@ export const deploymentRuns = pgTable("deployment_runs", {
   completedAt: timestamp("completed_at"),
 });
 
+// Environment Variables
+export const envVariables = pgTable("env_variables", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  projectId: varchar("project_id").references(() => projects.id),
+  key: varchar("key").notNull(),
+  value: text("value").notNull(),
+  environment: varchar("environment").notNull().default("shared"),
+  isSecret: boolean("is_secret").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Project Files (for IDE)
+export const projectFiles = pgTable("project_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id).notNull(),
+  path: text("path").notNull(),
+  name: varchar("name").notNull(),
+  content: text("content"),
+  isFolder: boolean("is_folder").default(false),
+  parentPath: text("parent_path"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Console Logs (for IDE terminal output)
+export const consoleLogs = pgTable("console_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").references(() => projects.id).notNull(),
+  type: varchar("type").notNull().default("log"),
+  message: text("message").notNull(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+});
+
 // Insert Schemas
 export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
@@ -256,6 +291,23 @@ export const insertDeploymentRunSchema = createInsertSchema(deploymentRuns).omit
   completedAt: true,
 });
 
+export const insertEnvVariableSchema = createInsertSchema(envVariables).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertProjectFileSchema = createInsertSchema(projectFiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertConsoleLogSchema = createInsertSchema(consoleLogs).omit({
+  id: true,
+  timestamp: true,
+});
+
 // Types
 export type InsertProject = z.infer<typeof insertProjectSchema>;
 export type Project = typeof projects.$inferSelect;
@@ -292,3 +344,12 @@ export type Deployment = typeof deployments.$inferSelect;
 
 export type InsertDeploymentRun = z.infer<typeof insertDeploymentRunSchema>;
 export type DeploymentRun = typeof deploymentRuns.$inferSelect;
+
+export type InsertEnvVariable = z.infer<typeof insertEnvVariableSchema>;
+export type EnvVariable = typeof envVariables.$inferSelect;
+
+export type InsertProjectFile = z.infer<typeof insertProjectFileSchema>;
+export type ProjectFile = typeof projectFiles.$inferSelect;
+
+export type InsertConsoleLog = z.infer<typeof insertConsoleLogSchema>;
+export type ConsoleLog = typeof consoleLogs.$inferSelect;

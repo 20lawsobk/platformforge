@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { 
   Key, 
   Lock, 
@@ -8,7 +9,8 @@ import {
   Pencil, 
   Trash2, 
   AlertTriangle,
-  ShieldAlert
+  ShieldAlert,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -49,37 +51,22 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import DashboardLayout from '@/components/DashboardLayout';
+import { apiRequest, queryClient } from '@/lib/queryClient';
+import { useToast } from '@/hooks/use-toast';
+import type { EnvVariable } from '@shared/schema';
 
 type Environment = 'development' | 'production' | 'shared';
-
-interface EnvVariable {
-  id: string;
-  key: string;
-  value: string;
-  environment: Environment;
-}
 
 interface Secret {
   id: string;
   key: string;
-  createdAt: string;
+  environment: string;
 }
 
-const initialEnvVariables: EnvVariable[] = [
-  { id: '1', key: 'DATABASE_URL', value: 'postgresql://user:pass@localhost:5432/db', environment: 'production' },
-  { id: '2', key: 'API_KEY', value: 'sk_live_abc123xyz789', environment: 'development' },
-  { id: '3', key: 'NODE_ENV', value: 'production', environment: 'shared' },
-];
-
-const initialSecrets: Secret[] = [
-  { id: '1', key: 'STRIPE_SECRET_KEY', createdAt: '2024-11-15' },
-  { id: '2', key: 'JWT_SECRET', createdAt: '2024-11-20' },
-];
-
 export default function Secrets() {
-  const [envVariables, setEnvVariables] = useState<EnvVariable[]>(initialEnvVariables);
-  const [secrets, setSecrets] = useState<Secret[]>(initialSecrets);
+  const { toast } = useToast();
   const [visibleValues, setVisibleValues] = useState<Set<string>>(new Set());
   
   const [envDialogOpen, setEnvDialogOpen] = useState(false);
@@ -98,8 +85,107 @@ export default function Secrets() {
   
   const [newSecretKey, setNewSecretKey] = useState('');
   const [newSecretValue, setNewSecretValue] = useState('');
+  const [newSecretEnvironment, setNewSecretEnvironment] = useState<Environment>('shared');
 
-  const getEnvironmentBadgeClass = (env: Environment) => {
+  const { data: envVariables = [], isLoading: isLoadingEnv } = useQuery<EnvVariable[]>({
+    queryKey: ['/api/env'],
+  });
+
+  const { data: secrets = [], isLoading: isLoadingSecrets } = useQuery<Secret[]>({
+    queryKey: ['/api/secrets'],
+  });
+
+  const createEnvMutation = useMutation({
+    mutationFn: async (data: { key: string; value: string; environment: string }) => {
+      const res = await apiRequest('POST', '/api/env', data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/env'] });
+      toast({ title: 'Environment variable created successfully' });
+      resetEnvDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to create environment variable', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const updateEnvMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: { key: string; value: string; environment: string } }) => {
+      const res = await apiRequest('PUT', `/api/env/${id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/env'] });
+      toast({ title: 'Environment variable updated successfully' });
+      resetEnvDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update environment variable', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteEnvMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/env/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/env'] });
+      toast({ title: 'Environment variable deleted successfully' });
+      setDeletingEnv(null);
+      setDeleteDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to delete environment variable', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const createSecretMutation = useMutation({
+    mutationFn: async (data: { key: string; value: string; environment: string }) => {
+      const res = await apiRequest('POST', '/api/secrets', data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/secrets'] });
+      toast({ title: 'Secret created successfully' });
+      resetSecretDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to create secret', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const updateSecretMutation = useMutation({
+    mutationFn: async ({ id, value }: { id: string; value: string }) => {
+      const res = await apiRequest('PUT', `/api/secrets/${id}`, { value });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/secrets'] });
+      toast({ title: 'Secret updated successfully' });
+      resetSecretDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to update secret', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteSecretMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest('DELETE', `/api/secrets/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/secrets'] });
+      toast({ title: 'Secret deleted successfully' });
+      setDeletingSecret(null);
+      setDeleteSecretDialogOpen(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Failed to delete secret', description: error.message, variant: 'destructive' });
+    },
+  });
+
+  const getEnvironmentBadgeClass = (env: string) => {
     switch (env) {
       case 'production':
         return 'bg-green-500/10 text-green-400 border-green-500/20';
@@ -107,6 +193,8 @@ export default function Secrets() {
         return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
       case 'shared':
         return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
+      default:
+        return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
     }
   };
 
@@ -137,50 +225,30 @@ export default function Secrets() {
     if (!newEnvKey.trim() || !newEnvValue.trim()) return;
     
     if (editingEnv) {
-      setEnvVariables(vars => vars.map(v => 
-        v.id === editingEnv.id 
-          ? { ...v, key: newEnvKey, value: newEnvValue, environment: newEnvEnvironment }
-          : v
-      ));
+      updateEnvMutation.mutate({
+        id: editingEnv.id,
+        data: { key: newEnvKey, value: newEnvValue, environment: newEnvEnvironment }
+      });
     } else {
-      const newVar: EnvVariable = {
-        id: Date.now().toString(),
-        key: newEnvKey,
-        value: newEnvValue,
-        environment: newEnvEnvironment,
-      };
-      setEnvVariables([...envVariables, newVar]);
+      createEnvMutation.mutate({ key: newEnvKey, value: newEnvValue, environment: newEnvEnvironment });
     }
-    
-    resetEnvDialog();
   };
 
   const handleAddSecret = () => {
     if (!newSecretKey.trim() || !newSecretValue.trim()) return;
     
     if (editingSecret) {
-      setSecrets(secs => secs.map(s => 
-        s.id === editingSecret.id 
-          ? { ...s }
-          : s
-      ));
+      updateSecretMutation.mutate({ id: editingSecret.id, value: newSecretValue });
     } else {
-      const newSec: Secret = {
-        id: Date.now().toString(),
-        key: newSecretKey,
-        createdAt: new Date().toISOString().split('T')[0],
-      };
-      setSecrets([...secrets, newSec]);
+      createSecretMutation.mutate({ key: newSecretKey, value: newSecretValue, environment: newSecretEnvironment });
     }
-    
-    resetSecretDialog();
   };
 
   const handleEditEnv = (envVar: EnvVariable) => {
     setEditingEnv(envVar);
     setNewEnvKey(envVar.key);
     setNewEnvValue(envVar.value);
-    setNewEnvEnvironment(envVar.environment);
+    setNewEnvEnvironment(envVar.environment as Environment);
     setEnvDialogOpen(true);
   };
 
@@ -193,18 +261,14 @@ export default function Secrets() {
 
   const handleDeleteEnv = () => {
     if (deletingEnv) {
-      setEnvVariables(vars => vars.filter(v => v.id !== deletingEnv.id));
-      setDeletingEnv(null);
+      deleteEnvMutation.mutate(deletingEnv.id);
     }
-    setDeleteDialogOpen(false);
   };
 
   const handleDeleteSecret = () => {
     if (deletingSecret) {
-      setSecrets(secs => secs.filter(s => s.id !== deletingSecret.id));
-      setDeletingSecret(null);
+      deleteSecretMutation.mutate(deletingSecret.id);
     }
-    setDeleteSecretDialogOpen(false);
   };
 
   const resetEnvDialog = () => {
@@ -220,9 +284,12 @@ export default function Secrets() {
     setEditingSecret(null);
     setNewSecretKey('');
     setNewSecretValue('');
+    setNewSecretEnvironment('shared');
   };
 
   const duplicateWarning = newEnvKey ? getDuplicateKeyWarning(newEnvKey, editingEnv?.id) : null;
+  const isMutating = createEnvMutation.isPending || updateEnvMutation.isPending || 
+                     createSecretMutation.isPending || updateSecretMutation.isPending;
 
   return (
     <DashboardLayout>
@@ -252,7 +319,13 @@ export default function Secrets() {
             </Button>
           </CardHeader>
           <CardContent>
-            {envVariables.length === 0 ? (
+            {isLoadingEnv ? (
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : envVariables.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No environment variables configured
               </div>
@@ -375,7 +448,12 @@ export default function Secrets() {
               </AlertDescription>
             </Alert>
             
-            {secrets.length === 0 ? (
+            {isLoadingSecrets ? (
+              <div className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : secrets.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No secrets configured
               </div>
@@ -385,7 +463,7 @@ export default function Secrets() {
                   <TableRow className="border-white/5 hover:bg-transparent">
                     <TableHead>Key</TableHead>
                     <TableHead>Value</TableHead>
-                    <TableHead>Created</TableHead>
+                    <TableHead>Environment</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -402,11 +480,17 @@ export default function Secrets() {
                           {secret.key}
                         </div>
                       </TableCell>
-                      <TableCell className="font-mono text-sm text-muted-foreground">
-                        {'•'.repeat(16)}
+                      <TableCell className="text-sm text-muted-foreground italic">
+                        Value is encrypted
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {secret.createdAt}
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className={getEnvironmentBadgeClass(secret.environment)}
+                          data-testid={`badge-secret-env-${secret.id}`}
+                        >
+                          {secret.environment}
+                        </Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
@@ -521,9 +605,10 @@ export default function Secrets() {
               </Button>
               <Button 
                 onClick={handleAddEnvVariable}
-                disabled={!newEnvKey.trim() || !newEnvValue.trim()}
+                disabled={!newEnvKey.trim() || !newEnvValue.trim() || isMutating}
                 data-testid="button-save-env"
               >
+                {isMutating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {editingEnv ? 'Update' : 'Add Variable'}
               </Button>
             </DialogFooter>
@@ -566,6 +651,39 @@ export default function Secrets() {
                   data-testid="input-secret-value"
                 />
               </div>
+              {!editingSecret && (
+                <div className="space-y-2">
+                  <Label htmlFor="secret-environment">Environment</Label>
+                  <Select 
+                    value={newSecretEnvironment} 
+                    onValueChange={(val) => setNewSecretEnvironment(val as Environment)}
+                  >
+                    <SelectTrigger data-testid="select-secret-environment">
+                      <SelectValue placeholder="Select environment" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="development">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-blue-500" />
+                          Development
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="production">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                          Production
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="shared">
+                        <div className="flex items-center gap-2">
+                          <div className="h-2 w-2 rounded-full bg-purple-500" />
+                          Shared
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Alert className="border-blue-500/20 bg-blue-500/5">
                 <Lock className="h-4 w-4 text-blue-500" />
                 <AlertDescription className="text-blue-200/80">
@@ -579,9 +697,10 @@ export default function Secrets() {
               </Button>
               <Button 
                 onClick={handleAddSecret}
-                disabled={!newSecretKey.trim() || !newSecretValue.trim()}
+                disabled={!newSecretKey.trim() || !newSecretValue.trim() || isMutating}
                 data-testid="button-save-secret"
               >
+                {isMutating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 {editingSecret ? 'Update Secret' : 'Add Secret'}
               </Button>
             </DialogFooter>
@@ -602,8 +721,10 @@ export default function Secrets() {
               <AlertDialogAction 
                 onClick={handleDeleteEnv}
                 className="bg-red-600 hover:bg-red-700"
+                disabled={deleteEnvMutation.isPending}
                 data-testid="button-confirm-delete-env"
               >
+                {deleteEnvMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>
@@ -624,8 +745,10 @@ export default function Secrets() {
               <AlertDialogAction 
                 onClick={handleDeleteSecret}
                 className="bg-red-600 hover:bg-red-700"
+                disabled={deleteSecretMutation.isPending}
                 data-testid="button-confirm-delete-secret"
               >
+                {deleteSecretMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Delete
               </AlertDialogAction>
             </AlertDialogFooter>
