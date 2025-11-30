@@ -17,6 +17,7 @@ import Settings from "@/pages/dashboard/Settings";
 import Logs from "@/pages/dashboard/Logs";
 import Storage from "@/pages/dashboard/Storage";
 import Security from "@/pages/dashboard/Security";
+import Secrets from "@/pages/dashboard/Secrets";
 import DeploymentsPage from "@/pages/Deployments";
 import EdgeNetwork from "@/pages/EdgeNetwork";
 import Integrations from "@/pages/Integrations";
@@ -26,6 +27,7 @@ import About from "@/pages/About";
 import Blog from "@/pages/Blog";
 import Careers from "@/pages/Careers";
 import IDE from "@/pages/IDE";
+import Templates from "@/pages/Templates";
 
 function Router() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -36,6 +38,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/compare" component={Compare} />
       <Route path="/features" component={Features} />
+      <Route path="/templates" component={Templates} />
       <Route path="/docs" component={Docs} />
       
       {/* Platform Pages */}
@@ -80,6 +83,9 @@ function Router() {
       </Route>
       <Route path="/dashboard/security">
         {isAuthenticated ? <Security /> : <Home />}
+      </Route>
+      <Route path="/dashboard/secrets">
+        {isAuthenticated ? <Secrets /> : <Home />}
       </Route>
       
       {/* IDE Route - protected */}

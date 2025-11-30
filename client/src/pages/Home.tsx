@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { ArrowRight, Github, Code2, Zap, Globe, Shield, Upload, FileCode, X, File, FolderUp } from "lucide-react";
+import { ArrowRight, Github, Code2, Zap, Globe, Shield, Upload, FileCode, X, File, FolderUp, LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -362,7 +362,20 @@ export default function Home() {
               </TabsContent>
             </Tabs>
 
-            <div className="mt-10 flex items-center justify-center gap-8 text-sm text-muted-foreground/60 font-mono flex-wrap">
+            <div className="mt-8 flex items-center justify-center">
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setLocation("/templates")}
+                className="gap-2 border-white/10 bg-white/5"
+                data-testid="button-browse-templates"
+              >
+                <LayoutTemplate className="h-4 w-4" />
+                Browse Templates
+              </Button>
+            </div>
+
+            <div className="mt-8 flex items-center justify-center gap-8 text-sm text-muted-foreground/60 font-mono flex-wrap">
               <span className="flex items-center gap-2 hover:text-primary transition-colors cursor-default"><Github className="h-4 w-4" /> GitHub Supported</span>
               <span className="flex items-center gap-2 hover:text-primary transition-colors cursor-default"><Code2 className="h-4 w-4" /> Python / Node / Go</span>
               <span className="flex items-center gap-2 hover:text-primary transition-colors cursor-default"><Globe className="h-4 w-4" /> Edge Ready</span>

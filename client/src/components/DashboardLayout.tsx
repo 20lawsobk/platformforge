@@ -14,7 +14,8 @@ import {
   Bell,
   HelpCircle,
   Database,
-  Shield
+  Shield,
+  Key
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -34,6 +35,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
     { icon: Activity, label: "Deployments", href: "/dashboard/deployments" },
     { icon: Database, label: "Storage", href: "/dashboard/storage" },
+    { icon: Key, label: "Secrets", href: "/dashboard/secrets" },
     { icon: Shield, label: "Security", href: "/dashboard/security" },
     { icon: Terminal, label: "Logs", href: "/dashboard/logs" },
     { icon: Settings, label: "Settings", href: "/dashboard/settings" },
