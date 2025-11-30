@@ -25,6 +25,7 @@ import Community from "@/pages/Community";
 import About from "@/pages/About";
 import Blog from "@/pages/Blog";
 import Careers from "@/pages/Careers";
+import IDE from "@/pages/IDE";
 
 function Router() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -79,6 +80,11 @@ function Router() {
       </Route>
       <Route path="/dashboard/security">
         {isAuthenticated ? <Security /> : <Home />}
+      </Route>
+      
+      {/* IDE Route - protected */}
+      <Route path="/ide/:projectId">
+        {isAuthenticated ? <IDE /> : <Home />}
       </Route>
       
       <Route component={NotFound} />
