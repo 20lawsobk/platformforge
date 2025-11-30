@@ -7,6 +7,10 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Builder from "@/pages/Builder";
 import Compare from "@/pages/Compare";
+import Features from "@/pages/Features";
+import Docs from "@/pages/Docs";
+import Login from "@/pages/Login";
+import Register from "@/pages/Register";
 import Overview from "@/pages/dashboard/Overview";
 import Deployments from "@/pages/dashboard/Deployments";
 import Settings from "@/pages/dashboard/Settings";
@@ -18,6 +22,10 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/builder" component={Builder} />
       <Route path="/compare" component={Compare} />
+      <Route path="/features" component={Features} />
+      <Route path="/docs" component={Docs} />
+      <Route path="/login" component={Login} />
+      <Route path="/register" component={Register} />
       
       {/* Dashboard Routes */}
       <Route path="/dashboard" component={Overview} />

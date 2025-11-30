@@ -33,17 +33,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <Link href="/features" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-features">Features</Link>
             <Link href="/docs" className="text-muted-foreground hover:text-foreground transition-colors" data-testid="link-nav-docs">Docs</Link>
             <div className="h-4 w-px bg-border/50 mx-2" />
-            <Button variant="ghost" className="font-mono text-xs">Login</Button>
-            <Button variant="default" className="font-mono text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90">
-              Start Building
-            </Button>
+            <Link href="/login">
+              <Button variant="ghost" className="font-mono text-xs" data-testid="button-nav-login">Login</Button>
+            </Link>
+            <Link href="/">
+              <Button variant="default" className="font-mono text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90" data-testid="button-nav-start">
+                Start Building
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile Nav */}
           <div className="md:hidden">
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" data-testid="button-mobile-menu">
                   <Menu className="h-5 w-5" />
                 </Button>
               </SheetTrigger>
@@ -52,7 +56,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <Link href="/compare" className="text-lg font-medium" data-testid="link-mobile-compare">Compare</Link>
                   <Link href="/features" className="text-lg font-medium" data-testid="link-mobile-features">Features</Link>
                   <Link href="/docs" className="text-lg font-medium" data-testid="link-mobile-docs">Docs</Link>
-                  <Button className="w-full mt-4" data-testid="button-mobile-start">Start Building</Button>
+                  <Link href="/login" className="text-lg font-medium" data-testid="link-mobile-login">Login</Link>
+                  <Link href="/">
+                    <Button className="w-full mt-4" data-testid="button-mobile-start">Start Building</Button>
+                  </Link>
                 </div>
               </SheetContent>
             </Sheet>
