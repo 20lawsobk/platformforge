@@ -626,62 +626,44 @@ class Encryptor:
             del self._aesgcm
 
 
+class CryptographyRequiredError(SecretsError):
+    """Raised when cryptography library is required but not available."""
+    def __init__(self):
+        super().__init__(
+            "The 'cryptography' package is required for secure secret storage. "
+            "Install it with: pip install cryptography"
+        )
+
+
 class FallbackEncryptor:
     """
-    Fallback encryptor when cryptography library is not available.
+    Fallback encryptor that raises an error when cryptography is unavailable.
     
-    Uses a simple XOR-based obfuscation. This is NOT cryptographically secure
-    and should only be used for development/testing purposes.
+    SECURITY: This class intentionally fails instead of using insecure fallback.
+    The cryptography package MUST be installed for secret storage to work.
     """
     
     def __init__(self, master_password: str, salt: Optional[bytes] = None, **kwargs):
-        self._salt = salt or python_secrets.token_bytes(32)
-        self._key = self._derive_key(master_password)
-        logging.warning(
-            "Using fallback encryptor (XOR-based). This is NOT secure! "
-            "Install 'cryptography' package for proper AES-256 encryption."
-        )
-    
-    def _derive_key(self, password: str) -> bytes:
-        """Simple key derivation using SHA-256."""
-        combined = password.encode('utf-8') + self._salt
-        return hashlib.sha256(combined).digest()
+        raise CryptographyRequiredError()
     
     @property
     def salt(self) -> bytes:
-        return self._salt
+        raise CryptographyRequiredError()
     
     def encrypt(self, plaintext: Union[str, bytes]) -> Tuple[bytes, bytes]:
-        if isinstance(plaintext, str):
-            plaintext = plaintext.encode('utf-8')
-        
-        nonce = python_secrets.token_bytes(12)
-        key_stream = hashlib.sha256(self._key + nonce).digest()
-        
-        ciphertext = bytearray(len(plaintext))
-        for i, byte in enumerate(plaintext):
-            ciphertext[i] = byte ^ key_stream[i % len(key_stream)]
-        
-        return bytes(ciphertext), nonce
+        raise CryptographyRequiredError()
     
     def decrypt(self, ciphertext: bytes, nonce: bytes) -> bytes:
-        key_stream = hashlib.sha256(self._key + nonce).digest()
-        
-        plaintext = bytearray(len(ciphertext))
-        for i, byte in enumerate(ciphertext):
-            plaintext[i] = byte ^ key_stream[i % len(key_stream)]
-        
-        return bytes(plaintext)
+        raise CryptographyRequiredError()
     
     def decrypt_to_string(self, ciphertext: bytes, nonce: bytes, encoding: str = 'utf-8') -> str:
-        return self.decrypt(ciphertext, nonce).decode(encoding)
+        raise CryptographyRequiredError()
     
     def rotate_key(self, new_password: str) -> 'FallbackEncryptor':
-        return FallbackEncryptor(new_password, salt=python_secrets.token_bytes(32))
+        raise CryptographyRequiredError()
     
     def destroy(self) -> None:
-        if hasattr(self, '_key'):
-            secure_zero_memory(bytearray(self._key))
+        pass
 
 
 class AuditLogger:

@@ -2,7 +2,7 @@
 
 ## Overview
 
-PlatformBuilder is a web application that transforms scripts and GitHub repositories into production-ready infrastructure configurations. The platform analyzes code, detects architecture patterns, and automatically generates infrastructure-as-code artifacts including Terraform configurations, Kubernetes manifests, Dockerfiles, and scaling configurations. Users can input a GitHub URL or upload code, which is then processed to produce downloadable infrastructure templates tailored for production deployment.
+PlatformBuilder is a web application designed to automate the creation of production-ready infrastructure configurations from user-provided code or GitHub repositories. It analyzes code, identifies architectural patterns, and generates infrastructure-as-code artifacts such as Terraform, Kubernetes manifests, and Dockerfiles. The platform aims to streamline the deployment process by providing tailored, downloadable infrastructure templates.
 
 ## User Preferences
 
@@ -10,263 +10,87 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
-### Frontend Architecture
+### UI/UX Decisions
 
-**Technology Stack:**
-- React with TypeScript as the core UI framework
-- Vite for build tooling and development server
-- Wouter for client-side routing (lightweight alternative to React Router)
-- TanStack Query (React Query) for server state management and data fetching
-- Tailwind CSS v4 with custom theming for styling
-- shadcn/ui component library (Radix UI primitives) for UI components
+The frontend is built with React and TypeScript, leveraging Vite for tooling. It employs Tailwind CSS v4 with a custom dark cybernetic theme and `shadcn/ui` components for an accessible and customizable user experience. Design prioritizes a modern technical aesthetic with custom fonts (Space Grotesk, JetBrains Mono, Inter) and efficient server state management via TanStack Query.
 
-**Design Decisions:**
-- **Component Library Choice**: Uses shadcn/ui with the "new-york" style preset, providing accessible, customizable components built on Radix UI primitives
-- **Styling Approach**: Tailwind CSS with custom CSS variables for theming, enabling a dark cybernetic aesthetic with easy theme customization
-- **State Management**: React Query handles server state, eliminating need for Redux/Context for API data
-- **Routing Strategy**: Wouter chosen for minimal bundle size while providing essential routing features
-- **Custom Font Stack**: Uses Space Grotesk (headings), JetBrains Mono (code/mono), and Inter (body text) for a modern technical aesthetic
+### Technical Implementations
 
-**Key Pages:**
-- Home: Landing page with input for GitHub URLs or code
-- Builder: Main interface showing file system, generated infrastructure, and build logs
-- Compare: Feature comparison with competitors
-- Dashboard: Project overview, deployments, logs, and settings
+**Frontend:**
+-   **Framework:** React with TypeScript
+-   **Build Tooling:** Vite
+-   **Routing:** Wouter
+-   **State Management:** TanStack Query for server state
+-   **Styling:** Tailwind CSS with custom theming, `shadcn/ui` component library.
 
-### Backend Architecture
+**Backend:**
+-   **Framework:** Express.js with TypeScript
+-   **Build Strategy:** `esbuild` for optimized production bundles
+-   **API:** RESTful endpoints under `/api`.
 
-**Technology Stack:**
-- Express.js as the HTTP server framework
-- TypeScript with ES modules
-- HTTP server (Node.js native) wrapping Express
+**Data Storage:**
+-   **Database:** PostgreSQL (Neon serverless)
+-   **ORM:** Drizzle ORM for type-safe queries
+-   **Schema:** Shared schema (`shared/schema.ts`) with Zod validation.
+-   **Identifiers:** UUID primary keys.
 
-**Design Decisions:**
-- **API Structure**: RESTful API endpoints under `/api` prefix
-- **Development vs Production**: Vite dev server with HMR in development, static file serving in production
-- **Build Strategy**: esbuild bundles server code with selective dependency bundling to optimize cold starts
-- **Logging**: Custom request logging middleware with timestamp formatting and JSON response capture
-- **Static Assets**: Express serves built frontend from `dist/public` directory in production
+**Infrastructure Generation Process:**
+-   Users submit code or a GitHub URL.
+-   An asynchronous process analyzes the code to generate configurations.
+-   Generated artifacts (Terraform, Kubernetes, Docker, scaling configs, detected dependencies) are stored and made available.
 
-**Key API Endpoints:**
-- `POST /api/projects` - Create new project and trigger infrastructure generation
-- `GET /api/projects/:id` - Fetch specific project details
-- `GET /api/projects` - List all projects
+**AI Model Architecture (Platform Forge Engine):**
+-   **Core Model:** Custom decoder-only Transformer with advanced features (MQA, MoE, RoPE), varying from tiny to master configurations.
+-   **Knowledge Base:** Extensive knowledge base covering 30+ programming languages, 55+ frameworks, 72+ infrastructure tools, and 34 design patterns.
+-   **Code Analyzer:** Performs static analysis (AST parsing), vulnerability detection, complexity metrics, code smell detection, performance analysis, and dependency analysis.
+-   **Supported Languages:** Expert-level support for Python, JavaScript, TypeScript, Java, Go, Rust, and advanced/standard support for many others, including infrastructure-as-code languages like Terraform and Kubernetes.
 
-### Data Storage
+**User Experience Systems (Platform Enhancements):**
+-   **Safety Guards:** Detects and prevents destructive actions, offers confirmation prompts and safe alternatives.
+-   **Cost Estimator:** Provides pre-action cost estimates, real-time tracking, budget management, and optimization suggestions.
+-   **Checkpoint System:** Automated checkpoints before critical operations, with file snapshots, diff viewing, and rollback capabilities.
+-   **Context Manager:** Manages a 16k token context window, project context, conversation memory, and learning memory, tracking user instructions.
+-   **Instruction Validator:** Parses natural language instructions, detects negative patterns, and ensures compliance of generated code.
+-   **Error Handler:** Provides user-friendly error messages, auto-fix suggestions, and tracks recurring issues.
+-   **Deployment Engine:** Offers advanced deployment types (AUTOSCALE, RESERVED_VM, STATIC, SCHEDULED, EDGE, SERVERLESS) with improvements over standard systems like faster cold starts, predictive auto-scaling, multi-region deployment, zero-downtime strategies, and cost optimization.
 
-**Database:**
-- PostgreSQL via Neon serverless driver
-- Drizzle ORM for type-safe database queries and migrations
-- Connection pooling handled by `@neondatabase/serverless`
-
-**Schema Design:**
-- **Projects Table**: Stores project metadata (name, source URL, type, status, timestamps)
-- **Infrastructure Templates Table**: Stores AI analysis results and generated configurations (Terraform, Kubernetes, Docker, scaling parameters, detected dependencies)
-- **Build Logs Table**: Stores timestamped log entries with severity levels (ai, system, action, cmd, success, error)
-
-**Design Decisions:**
-- **ORM Choice**: Drizzle selected for type safety and lightweight footprint
-- **Schema Location**: Shared schema (`shared/schema.ts`) accessible to both frontend and backend
-- **Validation**: Zod schemas auto-generated from Drizzle schemas via `drizzle-zod`
-- **UUID Primary Keys**: Uses PostgreSQL's `gen_random_uuid()` for distributed-friendly IDs
-
-### Infrastructure Generation Process
-
-**Workflow:**
-1. User submits GitHub URL or code upload
-2. Backend creates project record with 'pending' status
-3. Async process (`generateInfrastructure`) analyzes code and generates configurations
-4. Build logs stream progress to client
-5. Generated artifacts stored in infrastructure templates table
-6. Status updates to 'complete' or 'failed'
-
-**Generated Artifacts:**
-- Terraform configurations for cloud resources
-- Kubernetes manifests for container orchestration
-- Dockerfiles for containerization
-- Docker Compose configurations
-- Auto-scaling parameters (min/max instances)
-- Detected dependencies (databases, caches, queues)
-
-### AI Model Architecture (Platform Forge Engine)
-
-**Custom Transformer Model:**
-- Decoder-only transformer with 8 model sizes (tiny to master)
-- Expert/Master configurations: up to 48 layers, 2048 dim, 16k context
-- Advanced features: Multi-Query Attention (MQA), Mixture of Experts (MoE), Rotary Position Embeddings (RoPE)
-
-**Knowledge Base (220+ entries):**
-- 30 programming languages with expertise levels
-- 55 frameworks across all major languages
-- 72 infrastructure tools (AWS, GCP, Azure, CI/CD, containers)
-- 34 design patterns (creational, structural, behavioral, architectural, security)
-- 29 AI capabilities with accuracy metrics
-
-**Code Analyzer:**
-- Static analysis with AST parsing
-- Vulnerability detection (SQL injection, XSS, command injection, etc.)
-- Complexity metrics (cyclomatic, cognitive, maintainability index)
-- Code smell detection (long methods, duplicate code, deep nesting)
-- Performance analysis (N+1 queries, inefficient loops, memory leaks)
-- Dependency analysis with import graphs
-
-**Supported Languages (28 with Training Data):**
-- Tier 1 (Expert): Python (46 samples), JavaScript (20), TypeScript (15), Java (17), Go (19), Rust (19)
-- Tier 2 (Advanced): C (16), C++ (15), C# (16), Ruby (15), PHP (15), Swift (14), Kotlin (13), Scala (13)
-- Tier 3 (Standard): R (12), Lua (12), Perl (12), Haskell (12), Elixir (12), Clojure (12), Dart (12), Julia (12), SQL (15), Shell (13)
-- Infrastructure: Terraform (15), Kubernetes (15), Docker (10)
-- Framework: React (15)
-
-**Training Data Statistics:**
-- Total Samples: 432 high-quality code samples
-- Total Characters: 350,103
-- Average Sample Length: 810 characters
-- Sample Distribution: 31.5% Tier 1, 27.1% Tier 2, 28.7% Tier 3, 9.3% Infrastructure, 3.5% Framework
-
-### User Experience Systems (Addressing Common Frustrations)
-
-**1. Safety Guards (`server/ai_model/safety_guards.py`):**
-- DestructiveActionDetector with 80+ dangerous pattern matchers
-- Categories: DATABASE, FILESYSTEM, GIT, CLOUD_INFRA, DEPLOYMENT, CREDENTIALS, SYSTEM, CODE_EXECUTION
-- ActionValidator checks proposed actions against user intent
-- SafetyConfig with strict/normal/permissive levels
-- Confirmation prompts before any risky operation
-- Safe alternatives suggested (e.g., `git push --force` → `git push --force-with-lease`)
-
-**2. Cost Estimator (`server/ai_model/cost_estimator.py`):**
-- CostEstimator provides estimates before any action (min/max/expected cost)
-- CostTracker with real-time spending alerts at 50%, 75%, 90%, 100%
-- BudgetManager with per-action, daily, monthly limits
-- CostOptimizer suggests batching and caching strategies
-- Four pricing models: Token, Compute, Storage, Action-based
-
-**3. Checkpoint System (`server/ai_model/checkpoint_system.py`):**
-- Automatic checkpoints before destructive actions
-- FileSnapshot with hash-based deduplication and compression
-- 13 auto-checkpoint rules (file deletions, database changes, deployments, git operations)
-- DiffViewer for comparing current state to any checkpoint
-- Configurable retention policy (keep last N, keep for X days)
-- Quick rollback functions: `rollback_to_last()`, `get_recovery_options()`
-
-**4. Context Manager (`server/ai_model/context_manager.py`):**
-- 16k token context window with priority-based management
-- ProjectContext captures languages, frameworks, coding style, user preferences
-- ConversationMemory tracks what worked/failed with correction detection
-- LearningMemory stores mistakes and applies learned patterns
-- InstructionTracker persists user instructions across sessions (DO, DON'T, PREFER, AVOID)
-- Conflict detection for proposed actions vs stored instructions
-
-**5. Instruction Validator (`server/ai_model/instruction_validator.py`):**
-- Parses natural language instructions with negation detection
-- Recognizes 22+ negative patterns ("don't", "never", "avoid", "must not", etc.)
-- EmphasisDetector for frustrated user patterns (CAPS, "I SAID", "STOP", etc.)
-- ComplianceChecker verifies generated code against instructions
-- Violation tracking with escalating priority for repeated issues
-- ValidationResult with suggested compliant alternatives
-
-**6. Error Handler (`server/ai_model/error_handler.py`):**
-- 110+ error patterns with friendly messages (Python, JS, Go, Rust, frameworks)
-- UserFriendlyError with non-technical descriptions and step-by-step solutions
-- SelfServiceResolver with auto-fix capabilities for common issues
-- "Did you mean X?" suggestions for typos
-- ErrorLogger tracks patterns to identify recurring issues
-- Language/framework-specific handling (React, Django, Flask, Vue, Angular)
-
-**7. Deployment Engine (`server/ai_model/deployment_engine.py`):**
-An advanced deployment system that improves upon standard deployment methods (modeled after and improving upon Replit's deployment system):
-
-*Deployment Types:*
-- AUTOSCALE: Scale-to-zero with automatic scaling (pay per request)
-- RESERVED_VM: Always-on dedicated VM with predictable pricing
-- STATIC: CDN-hosted static files for websites
-- SCHEDULED: Cron-based scheduled task execution
-- EDGE: Edge functions deployed to 200+ global locations
-- SERVERLESS: Function-as-a-Service deployment
-
-*Key Improvements over Standard Systems:*
-- Faster cold starts (<100ms target vs 500ms+ typical)
-- Predictive auto-scaling (learns traffic patterns, scales before traffic spikes)
-- Multi-region deployment with geographic load balancing
-- Zero-downtime deployments (blue-green, canary, rolling strategies)
-- Edge function support for sub-10ms responses
-- Build caching and parallelization for faster deployments
-- Cost optimization with spot instances (up to 70% savings)
-- Automatic health checks and self-healing
-
-*Core Classes:*
-- `DeploymentEngine`: Main orchestration class for all deployment operations
-- `BuildOptimizer`: Layer caching, incremental builds, parallel compilation
-- `AutoScaler`: Predictive + reactive scaling with warm pool maintenance
-- `HealthChecker`: HTTP/TCP health checks, dependency monitoring, auto-recovery
-- `BlueGreenStrategy`: Instant traffic switching between environments
-- `CanaryStrategy`: Gradual rollout (1% -> 10% -> 50% -> 100%)
-- `RollingStrategy`: Replace instances one by one
-- `MultiRegionDeployer`: Deploy to 9+ regions with failover
-- `EdgeDeployer`: Deploy to 23+ edge locations globally
-
-*VM Sizes Available:*
-- NANO: 0.25 vCPU, 0.5GB RAM ($0.005/hr)
-- MICRO: 0.5 vCPU, 1GB RAM ($0.01/hr)
-- SMALL: 1 vCPU, 2GB RAM ($0.02/hr)
-- MEDIUM: 2 vCPU, 4GB RAM ($0.04/hr)
-- LARGE: 4 vCPU, 8GB RAM ($0.08/hr)
-- XLARGE: 8 vCPU, 16GB RAM ($0.16/hr)
-- XXLARGE: 16 vCPU, 32GB RAM ($0.32/hr)
-
-*Regions Supported:*
-- US: us-east-1, us-west-1, us-west-2
-- Europe: eu-west-1, eu-central-1
-- Asia Pacific: ap-southeast-1, ap-northeast-1, ap-south-1
-- South America: sa-east-1
-- Global Edge: 23+ edge locations worldwide
-
-### Development Tooling
-
-**Replit Integration:**
-- Custom Vite plugins for Replit-specific features (cartographer, dev banner)
-- Meta image plugin updates OpenGraph tags for proper social sharing
-- Runtime error overlay for better DX
-
-**Build Process:**
-- Client: Vite builds React app to `dist/public`
-- Server: esbuild bundles TypeScript server code with dependency allowlist
-- Single build command produces production-ready artifacts
+**Replit Feature Parity Systems (with improvements):**
+-   **Key-Value Store:** In-memory with persistence, atomic operations, and TTL support.
+-   **Object Storage:** S3-compatible, supporting large files, presigned URLs, and versioning.
+-   **Secrets Manager:** AES-256-GCM encryption, versioning, audit logging, and environment variable injection.
+-   **App Testing:** Browser automation, visual regression, Core Web Vitals, issue detection, and report generation.
+-   **Web Search:** Multi-backend support, caching, content extraction, and documentation fetching.
+-   **Image Generation:** Multiple backend support (DALL-E 3, Stability AI), style presets, image editing, and batch generation.
+-   **Auth System:** OAuth, MFA, RBAC, JWT management, and robust security features.
+-   **Stripe Integration:** Comprehensive customer, subscription, and payment management.
+-   **Bot/Automation Framework:** Platform bots, cron-like scheduler, workflow automation, and background job processing.
 
 ## External Dependencies
 
 ### Third-Party Services
 
-**Database:**
-- Neon PostgreSQL (serverless) - Primary data store
-- Connection via `DATABASE_URL` environment variable
-
-**Potential Integrations (based on schema):**
-- Cloud providers (AWS, GCP, Azure) for infrastructure deployment
-- GitHub API for repository analysis
-- Container registries for Docker image storage
+-   **Neon PostgreSQL:** Serverless database for primary data storage.
+-   **GitHub API:** (Implied) For repository analysis.
+-   **Cloud Providers (AWS, GCP, Azure):** (Implied) For deploying generated infrastructure.
+-   **Container Registries:** (Implied) For Docker image storage.
 
 ### Key NPM Packages
 
-**UI/Frontend:**
-- `@radix-ui/*` - Accessible component primitives (40+ packages)
-- `@tanstack/react-query` - Server state management
-- `framer-motion` - Animation library
-- `wouter` - Lightweight routing
-- `jszip` & `file-saver` - Client-side file generation/download
-
-**Backend:**
-- `express` - HTTP server framework
-- `drizzle-orm` - Database ORM
-- `@neondatabase/serverless` - PostgreSQL driver
-- `zod` - Schema validation
-
-**Development:**
-- `vite` - Build tool and dev server
-- `tsx` - TypeScript execution
-- `esbuild` - Production server bundler
-- `drizzle-kit` - Database migrations
-
-**Styling:**
-- `tailwindcss` - Utility-first CSS framework
-- `class-variance-authority` - Component variant management
-- `tailwind-merge` & `clsx` - Class name utilities
+-   **UI/Frontend:**
+    -   `@radix-ui/*`: Accessible UI primitives.
+    -   `@tanstack/react-query`: Server state management.
+    -   `wouter`: Lightweight routing.
+    -   `framer-motion`: Animations.
+    -   `jszip`, `file-saver`: Client-side file manipulation.
+-   **Backend:**
+    -   `express`: HTTP server framework.
+    -   `drizzle-orm`: Database ORM.
+    -   `@neondatabase/serverless`: PostgreSQL driver.
+    -   `zod`: Schema validation.
+-   **Development:**
+    -   `vite`: Frontend build tool.
+    -   `esbuild`: Backend bundler.
+    -   `drizzle-kit`: Database migrations.
+-   **Styling:**
+    -   `tailwindcss`: CSS framework.
+    -   `class-variance-authority`, `tailwind-merge`, `clsx`: Styling utilities.

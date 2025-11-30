@@ -488,6 +488,7 @@ from .secrets_manager import (
     SecretQuotaExceededError,
     EncryptionError,
     MasterPasswordRequiredError,
+    CryptographyRequiredError,
     SecretVersion,
     AuditLogEntry,
     SecretMetadata,
@@ -1176,6 +1177,7 @@ __all__ = [
     'SecretQuotaExceededError',
     'EncryptionError',
     'MasterPasswordRequiredError',
+    'CryptographyRequiredError',
     # Secrets Manager - Data Classes
     'SecretVersion',
     'AuditLogEntry',
