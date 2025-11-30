@@ -15,6 +15,8 @@ import Overview from "@/pages/dashboard/Overview";
 import DashboardDeployments from "@/pages/dashboard/Deployments";
 import Settings from "@/pages/dashboard/Settings";
 import Logs from "@/pages/dashboard/Logs";
+import Storage from "@/pages/dashboard/Storage";
+import Security from "@/pages/dashboard/Security";
 import DeploymentsPage from "@/pages/Deployments";
 import EdgeNetwork from "@/pages/EdgeNetwork";
 import Integrations from "@/pages/Integrations";
@@ -71,6 +73,12 @@ function Router() {
       </Route>
       <Route path="/dashboard/logs">
         {isAuthenticated ? <Logs /> : <Home />}
+      </Route>
+      <Route path="/dashboard/storage">
+        {isAuthenticated ? <Storage /> : <Home />}
+      </Route>
+      <Route path="/dashboard/security">
+        {isAuthenticated ? <Security /> : <Home />}
       </Route>
       
       <Route component={NotFound} />

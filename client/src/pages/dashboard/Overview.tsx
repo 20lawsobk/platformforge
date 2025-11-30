@@ -41,6 +41,7 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
+import type { Project } from '@shared/schema';
 
 const metricsData = [
   { time: '00:00', reqs: 400, cpu: 24 },
@@ -53,7 +54,7 @@ const metricsData = [
 ];
 
 export default function Overview() {
-  const { data: projects = [], isLoading } = useQuery({
+  const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ['/api/user/projects'],
   });
 

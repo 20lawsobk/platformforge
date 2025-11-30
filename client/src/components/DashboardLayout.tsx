@@ -12,7 +12,9 @@ import {
   ChevronDown,
   Search,
   Bell,
-  HelpCircle
+  HelpCircle,
+  Database,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,6 +33,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const navItems = [
     { icon: LayoutDashboard, label: "Overview", href: "/dashboard" },
     { icon: Activity, label: "Deployments", href: "/dashboard/deployments" },
+    { icon: Database, label: "Storage", href: "/dashboard/storage" },
+    { icon: Shield, label: "Security", href: "/dashboard/security" },
     { icon: Terminal, label: "Logs", href: "/dashboard/logs" },
     { icon: Settings, label: "Settings", href: "/dashboard/settings" },
   ];
