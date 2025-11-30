@@ -4,7 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["cargo", "libiconv", "rustc"]
+packages = ["cargo", "libiconv", "libxcrypt", "openssl", "pkg-config", "rustc"]
 
 [deployment]
 deploymentTarget = "static"
@@ -23,10 +23,6 @@ externalPort = 3001
 [[ports]]
 localPort = 44309
 externalPort = 3000
-
-[[ports]]
-localPort = 46665
-externalPort = 3003
 
 [[ports]]
 localPort = 46841

@@ -10,6 +10,8 @@ Components:
 - trainer: Training pipeline with checkpointing
 - inference: Inference engine for generation
 - knowledge_base: Comprehensive catalog of languages, frameworks, and capabilities
+- kv_store: Key-Value Store with persistence, TTL, and atomic operations
+- object_storage: S3-compatible Object Storage with buckets and presigned URLs
 
 Usage:
     from server.ai_model import train_code_model, CodeGenerator
@@ -29,6 +31,62 @@ Usage:
     from server.ai_model import get_language_info, search_knowledge_base
     python_info = get_language_info('python')
     results = search_knowledge_base('kubernetes')
+    
+    # Use the Key-Value Store
+    from server.ai_model import KeyValueStore, kv_get, kv_set
+    
+    # Simple usage with helper functions
+    kv_set("user:123", {"name": "Alice", "score": 100})
+    user = kv_get("user:123")
+    
+    # Direct store usage with TTL
+    store = KeyValueStore("my_namespace")
+    store.set("session", {"token": "abc"}, ttl=3600)  # Expires in 1 hour
+    
+    # Atomic operations
+    store.increment("counter", 1)
+    store.append("log", "new entry")
+    
+    # Use the Object Storage
+    from server.ai_model import StorageClient, upload_from_text, download_as_bytes
+    
+    # Using the high-level client
+    client = StorageClient()
+    client.upload_from_text("bucket/file.txt", "Hello, World!")
+    content = client.download_as_text("bucket/file.txt")
+    
+    # Using helper functions
+    upload_from_text("mybucket/doc.txt", "Document content")
+    data = download_as_bytes("mybucket/doc.txt")
+    
+    # Generate presigned URLs
+    url = client.get_presigned_url("bucket/file.txt", expires_in=3600)
+    
+    # Use the Secrets Manager
+    from server.ai_model import SecretsManager, Secret, SecretScope
+    
+    # Initialize the manager with a master password
+    manager = SecretsManager(master_password="secure_master_password")
+    
+    # Set a secret
+    manager.set_secret("API_KEY", "sk-1234567890", scope=SecretScope.APP)
+    
+    # Get a secret
+    value = manager.get_secret("API_KEY")
+    
+    # List secrets (names only, not values)
+    names = manager.list_secrets()
+    
+    # Rotate a secret
+    manager.rotate_secret("API_KEY", "sk-new-value")
+    
+    # Export to environment variables
+    manager.export_to_env()
+    
+    # Use the environment injector
+    from server.ai_model import EnvironmentInjector
+    injector = EnvironmentInjector(manager)
+    injector.inject_all()
 """
 
 from .tokenizer import BytePairTokenizer, CodeTokenizer
@@ -213,6 +271,121 @@ from .deployment_engine import (
     deploy,
     rollback,
     get_status,
+)
+from .kv_store import (
+    StorageLimit,
+    StoreError,
+    KeyError as KVKeyError,
+    KeyTooLargeError,
+    ValueTooLargeError,
+    StoreLimitExceededError,
+    StoreNotFoundError,
+    SerializationError,
+    AtomicOperationError,
+    StoredValue,
+    StoreStats,
+    BatchResult,
+    Serializer,
+    JSONSerializer,
+    KeyValueStore,
+    StoreManager,
+    get_default_manager as get_default_kv_manager,
+    get_default_store,
+    set_default_store,
+    set_default_manager as set_default_kv_manager,
+    get as kv_get,
+    set as kv_set,
+    delete as kv_delete,
+    exists as kv_exists,
+    keys as kv_keys,
+    clear as kv_clear,
+    increment as kv_increment,
+    append as kv_append,
+    get_many as kv_get_many,
+    set_many as kv_set_many,
+    delete_many as kv_delete_many,
+    stats as kv_stats,
+    create_store,
+    list_stores,
+    delete_store,
+    format_size,
+)
+from .object_storage import (
+    StorageLimit as ObjectStorageLimit,
+    StorageClass,
+    ObjectStorageError,
+    BucketNotFoundError,
+    BucketAlreadyExistsError,
+    BucketNotEmptyError,
+    ObjectNotFoundError,
+    ObjectTooLargeError,
+    KeyTooLongError,
+    QuotaExceededError,
+    InvalidBucketNameError,
+    PresignedUrlExpiredError,
+    InvalidPresignedUrlError,
+    MultipartUploadError,
+    ObjectMetadata,
+    StorageObject,
+    ListObjectsResult,
+    BucketInfo,
+    MultipartUpload,
+    PresignedUrl,
+    ContentTypeDetector,
+    Bucket,
+    ObjectStorage,
+    StorageClient,
+    get_default_client as get_default_storage_client,
+    set_default_client as set_default_storage_client,
+    upload_from_text,
+    upload_from_bytes,
+    upload_from_filename,
+    download_as_text,
+    download_as_bytes,
+    download_to_filename,
+    list_objects,
+    delete_object,
+    object_exists,
+    get_presigned_url,
+    format_size as format_storage_size,
+)
+from .secrets_manager import (
+    SecretScope,
+    AccessLevel,
+    DeploymentEnvironment as SecretDeploymentEnvironment,
+    AuditAction,
+    SecretStorageLimit,
+    SecretsError,
+    SecretNotFoundError,
+    SecretAlreadyExistsError,
+    SecretExpiredError,
+    SecretAccessDeniedError,
+    InvalidSecretNameError,
+    SecretValueTooLargeError,
+    SecretQuotaExceededError,
+    EncryptionError,
+    MasterPasswordRequiredError,
+    SecretVersion,
+    AuditLogEntry,
+    SecretMetadata,
+    Secret,
+    Encryptor,
+    FallbackEncryptor,
+    AuditLogger,
+    SecretStore,
+    SecretsManager,
+    EnvironmentInjector,
+    get_default_manager as get_default_secrets_manager,
+    set_default_manager as set_default_secrets_manager,
+    init_secrets,
+    set_secret,
+    get_secret,
+    delete_secret,
+    list_secrets,
+    rotate_secret,
+    export_to_env,
+    load_from_env,
+    secure_zero_memory,
 )
 
 __all__ = [
@@ -423,6 +596,139 @@ __all__ = [
     'deploy',
     'rollback',
     'get_status',
+    # Key-Value Store - Enums and Limits
+    'StorageLimit',
+    # Key-Value Store - Exceptions
+    'StoreError',
+    'KVKeyError',
+    'KeyTooLargeError',
+    'ValueTooLargeError',
+    'StoreLimitExceededError',
+    'StoreNotFoundError',
+    'SerializationError',
+    'AtomicOperationError',
+    # Key-Value Store - Data Classes
+    'StoredValue',
+    'StoreStats',
+    'BatchResult',
+    # Key-Value Store - Serializers
+    'Serializer',
+    'JSONSerializer',
+    # Key-Value Store - Main Classes
+    'KeyValueStore',
+    'StoreManager',
+    # Key-Value Store - Manager Functions
+    'get_default_kv_manager',
+    'get_default_store',
+    'set_default_store',
+    'set_default_kv_manager',
+    # Key-Value Store - Helper Functions
+    'kv_get',
+    'kv_set',
+    'kv_delete',
+    'kv_exists',
+    'kv_keys',
+    'kv_clear',
+    'kv_increment',
+    'kv_append',
+    'kv_get_many',
+    'kv_set_many',
+    'kv_delete_many',
+    'kv_stats',
+    # Key-Value Store - Store Management
+    'create_store',
+    'list_stores',
+    'delete_store',
+    'format_size',
+    # Object Storage - Enums and Limits
+    'ObjectStorageLimit',
+    'StorageClass',
+    # Object Storage - Exceptions
+    'ObjectStorageError',
+    'BucketNotFoundError',
+    'BucketAlreadyExistsError',
+    'BucketNotEmptyError',
+    'ObjectNotFoundError',
+    'ObjectTooLargeError',
+    'KeyTooLongError',
+    'QuotaExceededError',
+    'InvalidBucketNameError',
+    'PresignedUrlExpiredError',
+    'InvalidPresignedUrlError',
+    'MultipartUploadError',
+    # Object Storage - Data Classes
+    'ObjectMetadata',
+    'StorageObject',
+    'ListObjectsResult',
+    'BucketInfo',
+    'MultipartUpload',
+    'PresignedUrl',
+    # Object Storage - Classes
+    'ContentTypeDetector',
+    'Bucket',
+    'ObjectStorage',
+    'StorageClient',
+    # Object Storage - Client Functions
+    'get_default_storage_client',
+    'set_default_storage_client',
+    # Object Storage - Upload Functions
+    'upload_from_text',
+    'upload_from_bytes',
+    'upload_from_filename',
+    # Object Storage - Download Functions
+    'download_as_text',
+    'download_as_bytes',
+    'download_to_filename',
+    # Object Storage - Management Functions
+    'list_objects',
+    'delete_object',
+    'object_exists',
+    'get_presigned_url',
+    'format_storage_size',
+    # Secrets Manager - Enums and Types
+    'SecretScope',
+    'AccessLevel',
+    'SecretDeploymentEnvironment',
+    'AuditAction',
+    'SecretStorageLimit',
+    # Secrets Manager - Exceptions
+    'SecretsError',
+    'SecretNotFoundError',
+    'SecretAlreadyExistsError',
+    'SecretExpiredError',
+    'SecretAccessDeniedError',
+    'InvalidSecretNameError',
+    'SecretValueTooLargeError',
+    'SecretQuotaExceededError',
+    'EncryptionError',
+    'MasterPasswordRequiredError',
+    # Secrets Manager - Data Classes
+    'SecretVersion',
+    'AuditLogEntry',
+    'SecretMetadata',
+    'Secret',
+    # Secrets Manager - Encryption Classes
+    'Encryptor',
+    'FallbackEncryptor',
+    # Secrets Manager - Main Classes
+    'AuditLogger',
+    'SecretStore',
+    'SecretsManager',
+    'EnvironmentInjector',
+    # Secrets Manager - Manager Functions
+    'get_default_secrets_manager',
+    'set_default_secrets_manager',
+    'init_secrets',
+    # Secrets Manager - Helper Functions
+    'set_secret',
+    'get_secret',
+    'delete_secret',
+    'list_secrets',
+    'rotate_secret',
+    'export_to_env',
+    'load_from_env',
+    # Secrets Manager - Utilities
+    'secure_zero_memory',
 ]
 
 __version__ = '0.1.0'
