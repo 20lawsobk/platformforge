@@ -12,6 +12,9 @@ Components:
 - knowledge_base: Comprehensive catalog of languages, frameworks, and capabilities
 - kv_store: Key-Value Store with persistence, TTL, and atomic operations
 - object_storage: S3-compatible Object Storage with buckets and presigned URLs
+- app_testing: Comprehensive browser automation testing system
+- web_search: Web search integration with multiple backends, caching, and content extraction
+- image_generation: AI image generation with multiple backends, style presets, and editing
 
 Usage:
     from server.ai_model import train_code_model, CodeGenerator
@@ -87,6 +90,124 @@ Usage:
     from server.ai_model import EnvironmentInjector
     injector = EnvironmentInjector(manager)
     injector.inject_all()
+    
+    # Use the App Testing System
+    from server.ai_model import (
+        TestSession, TestStep, TestRunner, TestReporter,
+        IssueDetector, AutoFixer, VisualTester,
+        TestActionType, run_single_test, generate_test_report
+    )
+    
+    # Create a test session with fluent API
+    session = TestSession(name="Login Flow Test", base_url="http://localhost:5000")
+    session.navigate("/login")
+    session.fill("#email", "test@example.com")
+    session.fill("#password", "password123")
+    session.click("#submit-btn")
+    session.assert_visible(".dashboard")
+    
+    # Run the test
+    runner = TestRunner()
+    result = await runner.run_session(session)
+    
+    # Generate HTML report
+    reporter = TestReporter()
+    report = reporter.generate_report([result], "Login Tests")
+    reporter.export(report, format=ReportFormat.HTML)
+    
+    # Detect issues automatically
+    detector = IssueDetector()
+    issues = await detector.detect_all(browser)
+    
+    # Get fix suggestions
+    fixer = AutoFixer()
+    fixes = fixer.suggest_fixes(issues)
+    
+    # Visual regression testing
+    visual_tester = VisualTester(baseline_dir="./baselines")
+    diff = await visual_tester.compare_against_baseline(browser, "homepage")
+    if not diff.passed:
+        print(f"Visual regression detected: {diff.diff_percentage:.2%} changed")
+    
+    # Use the Web Search System
+    from server.ai_model import (
+        WebSearcher, SearchQuery, SearchResult, SearchResponse,
+        ContentExtractor, DocumentationFetcher, SearchCache,
+        search, search_images, search_news,
+        extract_content, fetch_documentation,
+    )
+    
+    # Create a searcher and search
+    searcher = WebSearcher()
+    response = await searcher.search("python async programming")
+    
+    # Use advanced query options
+    query = SearchQuery(
+        query="machine learning",
+        max_results=10,
+        freshness=FreshnessFilter.WEEK,
+    )
+    response = await searcher.search(query)
+    
+    # Image and news search
+    images = await searcher.search_images("cute cats", max_results=20)
+    news = await searcher.search_news("technology", freshness="day")
+    
+    # Extract content from URLs
+    extractor = ContentExtractor()
+    content = await extractor.extract_content("https://example.com/article")
+    
+    # Fetch API documentation
+    doc_fetcher = DocumentationFetcher()
+    docs = await doc_fetcher.fetch_documentation("https://docs.python.org/3/")
+    
+    # Use the Image Generation System
+    from server.ai_model import (
+        ImageGenerator, ImagePrompt, StylePreset, AspectRatio,
+        PromptEnhancer, ImageEditor, StylePresets,
+        image_generate, image_enhance_prompt, image_estimate_cost,
+    )
+    
+    # Quick generation with style
+    result = await image_generate("A sunset over mountains", style=StylePreset.PHOTOREALISTIC)
+    image = result.image
+    image.save("sunset.png")
+    
+    # Full control with ImagePrompt
+    prompt = ImagePrompt(
+        text="A cyberpunk cityscape",
+        negative_prompt="blurry, low quality",
+        style=StylePreset.ILLUSTRATION,
+        aspect_ratio=AspectRatio.LANDSCAPE_16_9,
+    )
+    generator = ImageGenerator()
+    result = await generator.generate(prompt, count=4)
+    
+    # Enhance prompts for better results
+    enhancer = PromptEnhancer()
+    enhanced = enhancer.enhance("cat on couch")
+    # -> "A fluffy domestic cat sitting comfortably on a modern velvet couch..."
+    
+    # Apply style presets
+    styled_prompt = StylePresets.apply(prompt, StylePreset.OIL_PAINTING)
+    
+    # Batch generation
+    prompts = [ImagePrompt(text=t) for t in ["sunset", "sunrise", "night sky"]]
+    results = await generator.generate_batch(prompts, max_concurrent=3)
+    
+    # Image editing
+    editor = ImageEditor()
+    variation = await editor.create_variation(image, strength=0.5)
+    inpainted = await editor.inpaint(image, mask, "replace with flowers")
+    upscaled = await editor.upscale(image, scale=2)
+    
+    # Cost estimation
+    estimate = generator.estimate_cost(prompt)
+    print(f"Expected cost: ${estimate.expected_cost:.4f}")
+    
+    # Usage statistics
+    stats = generator.get_usage_stats()
+    print(f"Total generations: {stats.total_generations}")
 """
 
 from .tokenizer import BytePairTokenizer, CodeTokenizer
@@ -386,6 +507,163 @@ from .secrets_manager import (
     export_to_env,
     load_from_env,
     secure_zero_memory,
+)
+from .app_testing import (
+    ActionType as TestActionType,
+    TestStatus,
+    IssueType,
+    IssueSeverity,
+    AssertionType,
+    BrowserType,
+    RecordingFormat,
+    ReportFormat,
+    WaitCondition,
+    TIMEOUT_DEFAULTS,
+    ACCESSIBILITY_RULES,
+    ElementLocator,
+    BrowserConfig,
+    Screenshot,
+    VideoRecording,
+    ConsoleMessage,
+    NetworkRequest,
+    NetworkResponse,
+    PerformanceMetrics,
+    DetectedIssue,
+    TestStep,
+    TestResult,
+    TestSession,
+    TestSuite,
+    VisualDiff,
+    Fix as TestFix,
+    TestReport,
+    BrowserError,
+    ElementNotFoundError,
+    NavigationError,
+    TimeoutError as BrowserTimeoutError,
+    AssertionError as TestAssertionError,
+    BrowserController,
+    SimulatedBrowserController,
+    TestRunner,
+    IssueDetector,
+    AutoFixer,
+    VisualTester,
+    TestReporter,
+    get_runner as get_test_runner,
+    get_issue_detector,
+    get_auto_fixer,
+    get_visual_tester,
+    get_reporter as get_test_reporter,
+    run_test_suite,
+    run_single_test,
+    detect_issues as detect_test_issues,
+    suggest_fixes as suggest_test_fixes,
+    generate_report as generate_test_report,
+    record_video,
+    create_test_session,
+    navigate as test_navigate,
+    click as test_click,
+    type_text as test_type_text,
+    fill as test_fill,
+    wait_for as test_wait_for,
+    screenshot as test_screenshot,
+    assert_visible as test_assert_visible,
+    assert_text as test_assert_text,
+)
+from .web_search import (
+    SearchBackend,
+    SearchType,
+    FreshnessFilter,
+    SafeSearchLevel,
+    ContentType as WebContentType,
+    CacheEvictionPolicy,
+    SearchLimit,
+    WebSearchError,
+    SearchBackendError,
+    RateLimitExceededError,
+    QueryTooLongError,
+    ContentExtractionError,
+    CacheError,
+    InvalidBackendError,
+    TimeoutError as SearchTimeoutError,
+    SearchResult,
+    ImageResult,
+    NewsResult,
+    SearchQuery,
+    SearchResponse,
+    ExtractedContent,
+    DocumentationPage,
+    CachedResult,
+    RateLimitState,
+    HTMLContentParser,
+    SearchBackendInterface,
+    DuckDuckGoBackend,
+    BraveSearchBackend,
+    SerpAPIBackend,
+    CustomSearchBackend,
+    SearchCache,
+    RateLimiter,
+    ContentExtractor,
+    DocumentationFetcher,
+    WebSearcher,
+    get_default_searcher,
+    set_default_searcher,
+    get_default_extractor,
+    get_default_doc_fetcher,
+    search as web_search,
+    search_images as web_search_images,
+    search_news as web_search_news,
+    extract_content,
+    fetch_documentation,
+    get_cached_result as get_cached_search_result,
+    clear_cache as clear_search_cache,
+    format_results as format_search_results,
+)
+from .image_generation import (
+    ImageBackend,
+    ImageFormat,
+    AspectRatio,
+    ImageSize,
+    ImageQuality,
+    StylePreset,
+    EditOperation,
+    GenerationStatus,
+    ImageGenerationError,
+    InvalidPromptError,
+    BackendUnavailableError,
+    GenerationQuotaExceededError,
+    ImageTooLargeError,
+    UnsupportedOperationError,
+    ContentFilterError,
+    RateLimitError as ImageRateLimitError,
+    GeneratedImage,
+    ImagePrompt,
+    GenerationResult,
+    EditRequest,
+    CostEstimate as ImageCostEstimate,
+    UsageStats as ImageUsageStats,
+    StylePresets,
+    PromptEnhancer,
+    ImageBackendInterface,
+    DallE3Backend,
+    StabilityAIBackend,
+    MidjourneyBackend,
+    LocalSDBackend,
+    ImageCache,
+    ImageEditor,
+    ImageGenerator,
+    get_default_generator,
+    set_default_generator,
+    generate as image_generate,
+    generate_batch as image_generate_batch,
+    enhance_prompt as image_enhance_prompt,
+    apply_style as image_apply_style,
+    create_variation as image_create_variation,
+    edit_image as image_edit_image,
+    estimate_cost as image_estimate_cost,
+    get_usage_stats as image_get_usage_stats,
+    list_styles as image_list_styles,
+    list_backends as image_list_backends,
+    format_cost as image_format_cost,
 )
 
 __all__ = [
@@ -729,6 +1007,180 @@ __all__ = [
     'load_from_env',
     # Secrets Manager - Utilities
     'secure_zero_memory',
+    # App Testing - Enums and Types
+    'TestActionType',
+    'TestStatus',
+    'IssueType',
+    'IssueSeverity',
+    'AssertionType',
+    'BrowserType',
+    'RecordingFormat',
+    'ReportFormat',
+    'WaitCondition',
+    # App Testing - Constants
+    'TIMEOUT_DEFAULTS',
+    'ACCESSIBILITY_RULES',
+    # App Testing - Data Classes
+    'ElementLocator',
+    'BrowserConfig',
+    'Screenshot',
+    'VideoRecording',
+    'ConsoleMessage',
+    'NetworkRequest',
+    'NetworkResponse',
+    'PerformanceMetrics',
+    'DetectedIssue',
+    'TestStep',
+    'TestResult',
+    'TestSession',
+    'TestSuite',
+    'VisualDiff',
+    'TestFix',
+    'TestReport',
+    # App Testing - Exceptions
+    'BrowserError',
+    'ElementNotFoundError',
+    'NavigationError',
+    'BrowserTimeoutError',
+    'TestAssertionError',
+    # App Testing - Main Classes
+    'BrowserController',
+    'SimulatedBrowserController',
+    'TestRunner',
+    'IssueDetector',
+    'AutoFixer',
+    'VisualTester',
+    'TestReporter',
+    # App Testing - Instance Getters
+    'get_test_runner',
+    'get_issue_detector',
+    'get_auto_fixer',
+    'get_visual_tester',
+    'get_test_reporter',
+    # App Testing - High-Level Functions
+    'run_test_suite',
+    'run_single_test',
+    'detect_test_issues',
+    'suggest_test_fixes',
+    'generate_test_report',
+    'record_video',
+    'create_test_session',
+    # App Testing - Step Helper Functions
+    'test_navigate',
+    'test_click',
+    'test_type_text',
+    'test_fill',
+    'test_wait_for',
+    'test_screenshot',
+    'test_assert_visible',
+    'test_assert_text',
+    # Web Search - Enums and Types
+    'SearchBackend',
+    'SearchType',
+    'FreshnessFilter',
+    'SafeSearchLevel',
+    'WebContentType',
+    'CacheEvictionPolicy',
+    'SearchLimit',
+    # Web Search - Exceptions
+    'WebSearchError',
+    'SearchBackendError',
+    'RateLimitExceededError',
+    'QueryTooLongError',
+    'ContentExtractionError',
+    'CacheError',
+    'InvalidBackendError',
+    'SearchTimeoutError',
+    # Web Search - Data Classes
+    'SearchResult',
+    'ImageResult',
+    'NewsResult',
+    'SearchQuery',
+    'SearchResponse',
+    'ExtractedContent',
+    'DocumentationPage',
+    'CachedResult',
+    'RateLimitState',
+    # Web Search - Backend Classes
+    'SearchBackendInterface',
+    'DuckDuckGoBackend',
+    'BraveSearchBackend',
+    'SerpAPIBackend',
+    'CustomSearchBackend',
+    # Web Search - Main Classes
+    'HTMLContentParser',
+    'SearchCache',
+    'RateLimiter',
+    'ContentExtractor',
+    'DocumentationFetcher',
+    'WebSearcher',
+    # Web Search - Instance Getters
+    'get_default_searcher',
+    'set_default_searcher',
+    'get_default_extractor',
+    'get_default_doc_fetcher',
+    # Web Search - High-Level Functions
+    'web_search',
+    'web_search_images',
+    'web_search_news',
+    'extract_content',
+    'fetch_documentation',
+    'get_cached_search_result',
+    'clear_search_cache',
+    'format_search_results',
+    # Image Generation - Enums and Types
+    'ImageBackend',
+    'ImageFormat',
+    'AspectRatio',
+    'ImageSize',
+    'ImageQuality',
+    'StylePreset',
+    'EditOperation',
+    'GenerationStatus',
+    # Image Generation - Exceptions
+    'ImageGenerationError',
+    'InvalidPromptError',
+    'BackendUnavailableError',
+    'GenerationQuotaExceededError',
+    'ImageTooLargeError',
+    'UnsupportedOperationError',
+    'ContentFilterError',
+    'ImageRateLimitError',
+    # Image Generation - Data Classes
+    'GeneratedImage',
+    'ImagePrompt',
+    'GenerationResult',
+    'EditRequest',
+    'ImageCostEstimate',
+    'ImageUsageStats',
+    # Image Generation - Style Classes
+    'StylePresets',
+    'PromptEnhancer',
+    # Image Generation - Backend Classes
+    'ImageBackendInterface',
+    'DallE3Backend',
+    'StabilityAIBackend',
+    'MidjourneyBackend',
+    'LocalSDBackend',
+    # Image Generation - Main Classes
+    'ImageCache',
+    'ImageEditor',
+    'ImageGenerator',
+    # Image Generation - Instance Getters
+    'get_default_generator',
+    'set_default_generator',
+    # Image Generation - High-Level Functions
+    'image_generate',
+    'image_generate_batch',
+    'image_enhance_prompt',
+    'image_apply_style',
+    'image_create_variation',
+    'image_edit_image',
+    'image_estimate_cost',
+    'image_get_usage_stats',
+    'image_list_styles',
+    'image_list_backends',
+    'image_format_cost',
 ]
 
 __version__ = '0.1.0'
