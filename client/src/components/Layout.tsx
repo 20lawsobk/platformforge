@@ -76,25 +76,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div>
             <h3 className="font-mono font-bold mb-4 text-primary">Platform</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><a href="#" className="hover:text-foreground">Deployments</a></li>
-              <li><a href="#" className="hover:text-foreground">Edge Network</a></li>
-              <li><a href="#" className="hover:text-foreground">Integrations</a></li>
+              <li><Link href="/deployments" className="hover:text-foreground" data-testid="link-footer-deployments">Deployments</Link></li>
+              <li><Link href="/edge-network" className="hover:text-foreground" data-testid="link-footer-edge-network">Edge Network</Link></li>
+              <li><Link href="/integrations" className="hover:text-foreground" data-testid="link-footer-integrations">Integrations</Link></li>
             </ul>
           </div>
           <div>
             <h3 className="font-mono font-bold mb-4 text-primary">Resources</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><a href="#" className="hover:text-foreground">Documentation</a></li>
-              <li><a href="#" className="hover:text-foreground">API Reference</a></li>
-              <li><a href="#" className="hover:text-foreground">Community</a></li>
+              <li><Link href="/docs" className="hover:text-foreground" data-testid="link-footer-docs">Documentation</Link></li>
+              <li><Link href="/api-reference" className="hover:text-foreground" data-testid="link-footer-api-reference">API Reference</Link></li>
+              <li><Link href="/community" className="hover:text-foreground" data-testid="link-footer-community">Community</Link></li>
             </ul>
           </div>
           <div>
             <h3 className="font-mono font-bold mb-4 text-primary">Company</h3>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><a href="#" className="hover:text-foreground">About</a></li>
-              <li><a href="#" className="hover:text-foreground">Blog</a></li>
-              <li><a href="#" className="hover:text-foreground">Careers</a></li>
+              <li><Link href="/about" className="hover:text-foreground" data-testid="link-footer-about">About</Link></li>
+              <li><Link href="/blog" className="hover:text-foreground" data-testid="link-footer-blog">Blog</Link></li>
+              <li><Link href="/careers" className="hover:text-foreground" data-testid="link-footer-careers">Careers</Link></li>
             </ul>
           </div>
           <div className="col-span-2 md:col-span-1">
